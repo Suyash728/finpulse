@@ -21,7 +21,7 @@ _ALIASES = [  # (regex on lowercase text, canonical name)
     (r"croma", "croma"), (r"reliance\s*digital", "reliance digital"), (r"salary", "salary"),
 ]
 _PREFIX = re.compile(
-    r"^(?:upi|pos|neft|imps|rtgs|ach\s*d-?|ach|nach|ecs|bil|bbps|vpa|to|by|ref|txn|p2a|p2m)\b[\s/:*.-]*",
+    r"^(?:upi|pos|neft|imps|rtgs|ach\s*d-?|ach|nach|ecs|bil|bbps|vpa|to|by|ref|txn|p2a|p2m|dr|cr)\b[\s/:*.-]*",
     re.IGNORECASE)
 _CITY = re.compile(r"\b(?:mumbai|bangalore|bengaluru|blr|delhi|pune|navi|andheri|bandra|thane|in)\b")
 
@@ -54,7 +54,12 @@ def normalize_merchant(raw_desc: str) -> str:
     s = s.split("@")[0]  # VPA handle -> local part
     s = re.sub(r"[*/_|,;:()-]+", " ", s)
     cleaned = _CITY.sub(" ", re.sub(r"\d{3,}", " ", s))
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    cleaned = re.sub(r"\b(?:ltd|pvt|limited|india|pl)\b", " ", cleaned)
+    words: list[str] = []
+    for w in (w.strip(".") for w in cleaned.split()):  # "ksh.store ksh.store" -> "ksh.store"
+        if w and w not in words:
+            words.append(w)
+    cleaned = " ".join(words).strip(" .")
     if len(cleaned) >= 2:
         return cleaned[:60]
     return re.sub(r"\s+", " ", s).strip(" .")[:60] or "unknown"

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { prefetchAll } from "@/lib/queries";
 import { Activity } from "lucide-react";
 import { NAV } from "@/lib/nav";
 import { cn } from "@/lib/utils";
@@ -14,6 +16,7 @@ const groups = Array.from(new Set(NAV.map((n) => n.group)));
 /** Mobile-first: bottom tab bar < md, sidebar >= md. Header holds page title + theme toggle. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  useEffect(() => { prefetchAll(); }, []);
   const title = NAV.find((n) => isActive(path, n.href))?.label ?? "FinPulse";
 
   return (

@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { getAutoRate, type AutoRatePoint } from "@/lib/api";
-import { onDataChanged } from "@/lib/events";
+import { useCached } from "@/lib/cache";
+import { Q } from "@/lib/queries";
 import { pct } from "@/lib/format";
 
 function Sparkline({ values }: { values: number[] }) {
@@ -20,16 +19,7 @@ function Sparkline({ values }: { values: number[] }) {
 
 /** Latest auto-categorisation rate + trend. Refetches after every ingest/correction (demo proof). */
 export function AutoRateChip() {
-  const [series, setSeries] = useState<AutoRatePoint[] | null>(null);
-
-  const load = useCallback(() => {
-    getAutoRate().then((d) => setSeries(d.series)).catch(() => setSeries([]));
-  }, []);
-
-  useEffect(() => {
-    load();
-    return onDataChanged(load);
-  }, [load]);
+  const series = useCached(...Q.autoRate).data?.series ?? null;
 
   const latest = series?.at(-1);
   const prev = series && series.length > 1 ? series[series.length - 2] : undefined;

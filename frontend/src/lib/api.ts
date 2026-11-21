@@ -55,7 +55,7 @@ export type Projection = {
 };
 export type Report = {
   month: string; income: number; spend: number; savings: number; savings_rate: number;
-  prev_month?: string; prev_spend?: number;
+  prev_month?: string; prev_spend?: number; available_months?: string[];
   by_category: { category: Category; amount: number; budget: number | null; prev_amount?: number; change_pct?: number | null }[];
   daily?: { date: string; amount: number }[];
   projection?: Projection;

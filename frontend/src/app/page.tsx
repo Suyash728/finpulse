@@ -1,12 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  getGoals, getNudges, getRecurring, getReport, latestMonth, simulate,
-  type Goal, type Nudge, type RecurringItem, type Report, type SimulateResult,
-} from "@/lib/api";
-import { onDataChanged } from "@/lib/events";
+import { useCached } from "@/lib/cache";
+import { Q } from "@/lib/queries";
 import { AlertList } from "@/components/AlertList";
 import { AutoRateChip } from "@/components/AutoRateChip";
 import { EmailButton } from "@/components/EmailButton";
@@ -32,20 +28,11 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 }
 
 export default function HomePage() {
-  const [report, setReport] = useState<Report | null>(null);
-  const [recurring, setRecurring] = useState<RecurringItem[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [base, setBase] = useState<SimulateResult | null>(null);
-  const [nudges, setNudges] = useState<Nudge[]>([]);
-
-  const load = useCallback(() => {
-    latestMonth().then((m) => getReport(m)).then(setReport).catch(() => setReport(null));
-    getRecurring().then((d) => setRecurring(d.items)).catch(() => setRecurring([]));
-    getGoals().then((d) => setGoals(d.items)).catch(() => setGoals([]));
-    simulate([]).then(setBase).catch(() => setBase(null));
-    getNudges().then((d) => setNudges(d.items)).catch(() => setNudges([]));
-  }, []);
-  useEffect(() => { load(); return onDataChanged(load); }, [load]);
+  const report = useCached(...Q.reportLatest).data ?? null;
+  const recurring = useCached(...Q.recurring).data?.items ?? [];
+  const goals = useCached(...Q.goals).data?.items ?? [];
+  const base = useCached(...Q.baseline).data ?? null;
+  const nudges = useCached(...Q.nudges).data?.items ?? [];
 
   return (
     <div className="space-y-3">
@@ -61,9 +48,9 @@ export default function HomePage() {
               <NudgeRows nudges={nudges} />
             </AlertList>
           </Section>
-          {report?.projection && (
-            <Section title="Month projection">
-              <ProjectionCard p={report.projection} />
+          {report && (
+            <Section title="Monthly budgets" action={<Link href="/transactions" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">See all</Link>}>
+              <BudgetRings report={report} />
             </Section>
           )}
         </div>
@@ -81,9 +68,9 @@ export default function HomePage() {
           </Section>
         </div>
       </div>
-      {report && (
-        <Section title="Monthly budgets" action={<Link href="/transactions" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">See all</Link>}>
-          <BudgetRings report={report} />
+      {report?.projection && (
+        <Section title="Month projection">
+          <ProjectionCard p={report.projection} />
         </Section>
       )}
     </div>

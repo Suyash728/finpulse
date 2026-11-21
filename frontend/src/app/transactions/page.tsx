@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  applyRule, correctTransaction, listTransactions, type Category, type Transaction,
+  applyRule, correctTransaction, type Category, type Transaction,
 } from "@/lib/api";
-import { emitDataChanged, onDataChanged } from "@/lib/events";
+import { useCached } from "@/lib/cache";
+import { emitDataChanged } from "@/lib/events";
+import { Q } from "@/lib/queries";
 import { fmtMonth, titleCase } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AutoRateChip } from "@/components/AutoRateChip";
@@ -31,30 +33,21 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 export default function TransactionsPage() {
+  const cached = useCached(...Q.transactions);
   const [items, setItems] = useState<Transaction[] | null>(null);
-  const [month, setMonth] = useState<string>("all");
+  useEffect(() => { if (cached.data) setItems(cached.data.items); }, [cached.data]);
+  useEffect(() => { if (cached.error) toast.error("Couldn't load transactions", { description: cached.error }); }, [cached.error]);
+  const [month, setMonth] = useState<string>("");
   const [filter, setFilter] = useState<Filter>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<SimilarPrompt | null>(null);
   const [applying, setApplying] = useState(false);
 
-  const load = useCallback(() => {
-    listTransactions()
-      .then((d) => setItems(d.items))
-      .catch((e) => {
-        setItems([]);
-        toast.error("Couldn't load transactions", { description: (e as Error).message });
-      });
-  }, []);
-
-  useEffect(() => {
-    load();
-    return onDataChanged(load);
-  }, [load]);
-
   const all = useMemo(() => items ?? [], [items]);
   const months = useMemo(() => Array.from(new Set(all.map((t) => t.date.slice(0, 7)))).sort().reverse(), [all]);
-  const inMonth = useMemo(() => (month === "all" ? all : all.filter((t) => t.date.startsWith(month))), [all, month]);
+  useEffect(() => { if (!month && months.length) setMonth(months[0]); }, [month, months]);
+  const activeMonth = month || months[0] || "all";  // newest month first: avoids rendering every row
+  const inMonth = useMemo(() => (activeMonth === "all" ? all : all.filter((t) => t.date.startsWith(activeMonth))), [all, activeMonth]);
   const catCounts = useMemo(() => {
     const m = new Map<Category, number>();
     inMonth.forEach((t) => m.set(t.category, (m.get(t.category) ?? 0) + 1));
@@ -131,7 +124,7 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={month} onValueChange={(v) => { setMonth(v); setFilter("all"); }}>
+        <Select value={activeMonth} onValueChange={(v) => { setMonth(v); setFilter("all"); }}>
           <SelectTrigger className="h-9 w-36" aria-label="Month">
             <SelectValue />
           </SelectTrigger>

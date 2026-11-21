@@ -13,11 +13,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const SAMPLES = [
-  { label: "Oct SMS", file: "sms_oct.txt", kind: "sms" },
-  { label: "Oct CSV", file: "statement_oct.csv", kind: "file" },
-  { label: "Nov SMS", file: "sms_nov.txt", kind: "sms" },
-  { label: "Nov CSV", file: "statement_nov.csv", kind: "file" },
-  { label: "Nov PDF", file: "statement_nov.pdf", kind: "file" },
+  { label: "Nov 2026 CSV", file: "hdfc_statement_nov_2026.csv", kind: "file" },
+  { label: "Nov 2026 PDF", file: "hdfc_statement_nov_2026.pdf", kind: "file" },
 ] as const;
 
 function announce(r: IngestResult, source: string) {
@@ -52,7 +49,7 @@ export function IngestSheet({ triggerClassName }: { triggerClassName?: string })
     run(s.label, async () => {
       const res = await fetch(`/samples/${s.file}`);
       if (!res.ok) throw new Error(`sample ${s.file} missing`);
-      return s.kind === "sms" ? ingestSms(await res.text()) : ingestFile(await res.blob(), s.file);
+      return ingestFile(await res.blob(), s.file);
     });
 
   return (

@@ -3,12 +3,37 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
+from collections.abc import Callable
 from datetime import date
 
 from app.db import get_client
 from app.engines.categorize import categorize
 from app.engines.normalize import normalize_merchant
 from app.engines.parse import detect_kind, parse_csv, parse_pdf, parse_sms
+
+# ---- tiny read cache: one /report used to re-read the same tables 4-5 times. Cleared on every write.
+_CACHE: dict[str, tuple[float, object]] = {}
+_LOCK = threading.Lock()
+TTL = 60.0
+
+
+def _cached(key: str, fn: Callable[[], object]):
+    now = time.monotonic()
+    hit = _CACHE.get(key)
+    if hit and now - hit[0] < TTL:
+        return hit[1]
+    val = fn()
+    with _LOCK:
+        _CACHE[key] = (now, val)
+    return val
+
+
+def invalidate() -> None:
+    with _LOCK:
+        _CACHE.clear()
+
 
 TX_FIELDS = "id,upload_id,date,amount,direction,raw_desc,merchant_norm,category,cat_source,confidence,needs_review"
 
@@ -55,6 +80,7 @@ def ingest(kind: str, filename: str | None, *, text: str | None = None, data: by
     } for r in rows]
     # Same statement as CSV and PDF -> duplicates skipped by dedupe_key.
     client.table("transactions").upsert(records, on_conflict="dedupe_key", ignore_duplicates=True).execute()
+    invalidate()
     saved = client.table("transactions").select(TX_FIELDS).eq("upload_id", upload["id"]).order("date").execute().data
     return {"upload_id": upload["id"], "rows": saved, "auto_rate": round(auto / len(rows), 4),
             "reconciled": reconciled, "duplicates_skipped": len(records) - len(saved)}
@@ -91,10 +117,22 @@ def auto_rate_series() -> dict:
 
 
 def all_transactions() -> list[dict]:
-    rows = get_client().table("transactions").select(TX_FIELDS).order("date").limit(5000).execute().data
-    for t in rows:
-        t["amount"] = float(t["amount"])
-    return rows
+    def load():
+        rows = get_client().table("transactions").select(TX_FIELDS).order("date").limit(10000).execute().data
+        for t in rows:
+            t["amount"] = float(t["amount"])
+        return rows
+
+    return _cached("tx", load)  # type: ignore[return-value]
+
+
+def latest_month() -> str:
+    tx = all_transactions()
+    return max(t["date"] for t in tx)[:7] if tx else date.today().strftime("%Y-%m")
+
+
+def available_months() -> list[str]:
+    return sorted({t["date"][:7] for t in all_transactions()}, reverse=True)
 
 
 # ---------------- profile + goals
@@ -113,21 +151,29 @@ def seed_profile_goals(force: bool = False) -> None:
 
 
 def get_profile() -> dict:
-    seed_profile_goals()
-    p = get_client().table("profile").select(PROFILE_FIELDS).eq("id", 1).execute().data[0]
-    for k in ("monthly_income", "fixed_costs", "emergency_fund"):
-        p[k] = float(p[k] or 0)
-    return p
+    def load():
+        seed_profile_goals()
+        p = get_client().table("profile").select(PROFILE_FIELDS).eq("id", 1).execute().data[0]
+        for k in ("monthly_income", "fixed_costs", "emergency_fund"):
+            p[k] = float(p[k] or 0)
+        return p
+
+    return dict(_cached("profile", load))  # type: ignore[arg-type]
 
 
 def put_profile(fields: dict) -> dict:
     upd = {k: v for k, v in fields.items() if v is not None}
     if upd:
         get_client().table("profile").update(upd).eq("id", 1).execute()
+        invalidate()
     return get_profile()
 
 
 def get_goals() -> dict:
+    return {"items": [dict(g) for g in _cached("goals", _load_goals)]}  # type: ignore[union-attr]
+
+
+def _load_goals() -> list[dict]:
     seed_profile_goals()
     items = get_client().table("goals").select("id,name,target_amount,saved_amount,target_date") \
         .order("target_date").execute().data
@@ -137,7 +183,7 @@ def get_goals() -> dict:
         td = date.fromisoformat(g["target_date"])
         months = max(1, (td.year - today.year) * 12 + td.month - today.month)
         g["monthly_needed"] = round(max(0.0, g["target_amount"] - g["saved_amount"]) / months, 2)
-    return {"items": items}
+    return items
 
 
 def add_goal(g: dict) -> dict:
@@ -145,6 +191,7 @@ def add_goal(g: dict) -> dict:
     row = get_client().table("goals").insert({k: g[k] for k in ("name", "target_amount", "saved_amount", "target_date")}) \
         .execute().data[0]
     row["target_amount"], row["saved_amount"] = float(row["target_amount"]), float(row["saved_amount"])
+    invalidate()
     return row
 
 
@@ -155,3 +202,11 @@ def reset_demo() -> None:
     for t in ("transactions", "category_rules", "nudges", "recurring", "goals", "uploads"):
         client.table(t).delete().neq("id", zero).execute()
     seed_profile_goals(force=True)
+    from app.demo_history import build_history
+
+    uploads, txns, rules = build_history()  # Oct 2025 - Sep 2026, already categorised
+    client.table("uploads").insert(uploads).execute()
+    for i in range(0, len(txns), 400):
+        client.table("transactions").insert(txns[i:i + 400]).execute()
+    client.table("category_rules").insert(rules).execute()
+    invalidate()
