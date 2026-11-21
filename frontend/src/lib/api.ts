@@ -123,3 +123,9 @@ export async function latestMonth(): Promise<string> {
   } catch { /* fall through */ }
   return new Date().toISOString().slice(0, 7);
 }
+
+// ---------- endpoint helpers (slice 3: coach) ----------
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+export const startCoach = (message: string, history: ChatTurn[]) =>
+  post<{ run_id: string }>("/coach", { message, history });
+export const getCoach = (runId: string) => get<CoachResult>(`/coach/${encodeURIComponent(runId)}`);

@@ -204,20 +204,25 @@ def auto_rate():
 _answers: dict[str, dict] = {}
 
 
-def _stub_coach(run_id: str, message: str) -> None:
-    """TODO(slice 10): replace with app.agents.coach.run(run_id, message, history)."""
-    for ev in EXAMPLES["coach_events"]:
-        trace.emit(run_id, **ev)
-    _answers[run_id] = {"answer": EXAMPLES["coach_answer"], "refused": False}
-    trace.emit(run_id, "answer", "finished")
-    trace.close(run_id)
+def _run_coach(run_id: str, message: str, history: list[dict]) -> None:
+    """Coach agent (owner: Suyash). Spec: agents/graph.md."""
+    from app.agents import coach as coach_agent
+
+    try:
+        _answers[run_id] = coach_agent.run(run_id, message, history)
+    except Exception as exc:  # noqa: BLE001 - surface any agent failure in the trace panel
+        trace.emit(run_id, "answer", "error", None, 0, args={}, result_summary=str(exc)[:80])
+        _answers[run_id] = {"answer": "Sorry, the coach couldn't answer right now. Please try again.",
+                            "refused": False}
+    finally:
+        trace.close(run_id)
 
 
 @app.post("/coach")
 def coach(body: CoachIn, bg: BackgroundTasks):
     run_id = uuid.uuid4().hex[:12]
     trace.open_run(run_id)
-    bg.add_task(_stub_coach, run_id, body.message)
+    bg.add_task(_run_coach, run_id, body.message, [h.model_dump() for h in body.history])
     return ok({"run_id": run_id})
 
 

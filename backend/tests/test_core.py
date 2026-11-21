@@ -101,7 +101,11 @@ def test_ingest_multipart():
     assert r.json()["success"]
 
 
-def test_coach_run_emits_trace():
+def test_coach_run_emits_trace(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: llm.LLMResult(
+        "stub answer", "stub", "stub", 1, SimpleNamespace(content="stub answer", tool_calls=None)))
     run_id = c.post("/coach", json={"message": "Can I afford Goa?"}).json()["data"]["run_id"]
     for _ in range(50):
         d = c.get(f"/coach/{run_id}").json()["data"]
@@ -109,4 +113,4 @@ def test_coach_run_emits_trace():
             break
         time.sleep(0.05)
     assert d["events"][0]["node"] == "intent_guard"
-    assert {"node", "status", "tier_used", "ms", "args", "result_summary"} <= set(d["events"][1])
+    assert {"node", "status", "tier_used", "ms", "args", "result_summary"} <= set(d["events"][-1])
