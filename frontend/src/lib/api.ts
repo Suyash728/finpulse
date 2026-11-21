@@ -104,3 +104,22 @@ export const correctTransaction = (id: string, category: Category) =>
 export const applyRule = (rule_id: string, transaction_ids: string[]) =>
   post<{ updated: number }>("/rules/apply", { rule_id, transaction_ids });
 export const getAutoRate = () => get<{ series: AutoRatePoint[] }>("/stats/auto-rate");
+
+// ---------- endpoint helpers (slice 2) ----------
+export const getProfile = () => get<Profile>("/profile");
+export const putProfile = (p: Partial<Profile>) => put<Profile>("/profile", p);
+export const getGoals = () => get<{ items: Goal[] }>("/goals");
+export const createGoal = (g: Goal) => post<Goal>("/goals", g);
+export const getRecurring = () => get<{ items: RecurringItem[] }>("/recurring");
+export const simulate = (adjustments: Adjustment[]) => post<SimulateResult>("/simulate", { adjustments });
+export const getReport = (month: string) => get<Report>(`/report/${encodeURIComponent(month)}`);
+
+/** Newest month that has transactions (YYYY-MM), else the current month. */
+export async function latestMonth(): Promise<string> {
+  try {
+    const { items } = await listTransactions();
+    const max = items.reduce((m, t) => (t.date > m ? t.date : m), "");
+    if (max) return max.slice(0, 7);
+  } catch { /* fall through */ }
+  return new Date().toISOString().slice(0, 7);
+}

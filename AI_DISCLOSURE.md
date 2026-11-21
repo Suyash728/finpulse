@@ -18,5 +18,6 @@ No real customer or bank data is used. The coach never recommends specific secur
 |---|---|---|---|---|
 | 21 Nov 17:00 | Slice 0 bootstrap | Scope, hard decisions, slice plan, API surface, sample-data story | CLAUDE.md/AGENTS.md, openapi.yaml, SQL migration, backend stubs + docstrings, sample generator, frontend shell + PWA + theme toggle, README skeleton | Suyash |
 | 21 Nov 18:20 | Slice 1 frontend (Transactions) | Undo behaviour, sample-loading approach, contract-first decision, UX review | IngestSheet, TxnList, CategoryBadge, ApplySimilarDialog, AutoRateChip, transactions page, api/format helpers | Suyash |
+| 21 Nov 19:00 | Slice 2 frontend (Home + Plan) | No-contract-change decisions (no series, dismiss-only, report-driven KPIs), mobile UX review | KpiStrip, AlertList, CategoryBars, GoalCard, WhatIfPanel (+ sticky mobile result), ProjectionChart, ProfileForm, GoalsEditor, Home/Plan pages | Suyash |
 
 All code in this repository was written during the event window; see commit history.

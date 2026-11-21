@@ -19,3 +19,13 @@ export const fmtMonth = (ym: string) =>
 
 /** "raz payu8823" -> "Raz Payu8823" */
 export const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+export const fmtDate = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+/** Whole months from a to b (dates, not money). Positive = b is later. */
+export const monthsBetween = (a: string, b: string) => {
+  const [ay, am] = a.split("-").map(Number);
+  const [by, bm] = b.split("-").map(Number);
+  return (by - ay) * 12 + (bm - am);
+};
