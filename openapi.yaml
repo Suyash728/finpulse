@@ -1,8 +1,11 @@
 openapi: 3.1.0
 info:
-  title: hackathon-starter
-  version: 0.1.0
-  description: Frozen contract. Every response is the envelope {success, data, error}.
+  title: FinPulse API
+  version: 0.2.0
+  description: |
+    Frozen contract for FinPulse (PS4 personal finance coach).
+    Every JSON response is the envelope {success, data, error}. All rupee figures are computed in Python.
+    Changing this file needs both Suyash and Vaishnavi to agree.
 servers:
   - url: http://localhost:8787
 components:
@@ -14,6 +17,88 @@ components:
         success: {type: boolean}
         data: {}
         error: {type: [string, "null"]}
+    Category:
+      type: string
+      enum: [Rent, Utilities, Groceries, Medical, EMI, Insurance, Education, Dining, Food Delivery,
+             Shopping, Travel, Entertainment, Subscriptions, Fuel, Transfers, Income, Investments, Other]
+    CatSource: {type: string, enum: [rule, ai, user]}
+    Transaction:
+      type: object
+      required: [id, date, amount, direction, raw_desc, merchant_norm, category, cat_source, confidence, needs_review]
+      properties:
+        id: {type: string}
+        upload_id: {type: [string, "null"]}
+        date: {type: string, format: date}
+        amount: {type: number, description: "Always positive; see direction"}
+        direction: {type: string, enum: [dr, cr]}
+        raw_desc: {type: string}
+        merchant_norm: {type: string}
+        category: {$ref: "#/components/schemas/Category"}
+        cat_source: {$ref: "#/components/schemas/CatSource"}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        needs_review: {type: boolean}
+    Rule:
+      type: object
+      properties:
+        id: {type: string}
+        match_type: {type: string, enum: [exact, normalized]}
+        pattern: {type: string}
+        category: {$ref: "#/components/schemas/Category"}
+        hits: {type: integer}
+    Profile:
+      type: object
+      properties:
+        monthly_income: {type: number}
+        fixed_costs: {type: number}
+        emergency_fund: {type: number}
+        email: {type: [string, "null"]}
+        budgets: {type: object, additionalProperties: {type: number}}
+    Goal:
+      type: object
+      required: [name, target_amount, target_date]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        target_amount: {type: number}
+        saved_amount: {type: number, default: 0}
+        target_date: {type: string, format: date}
+    RecurringItem:
+      type: object
+      properties:
+        id: {type: string}
+        merchant_norm: {type: string}
+        category: {$ref: "#/components/schemas/Category"}
+        amount: {type: number}
+        prev_amount: {type: [number, "null"]}
+        cadence: {type: string, enum: [monthly, weekly, yearly]}
+        last_seen: {type: string, format: date}
+        status: {type: string, enum: [active, changed, unused]}
+        note: {type: string}
+    Nudge:
+      type: object
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [drift, price_change, unused, essentials_over_income]}
+        category: {type: [string, "null"]}
+        message: {type: string}
+        severity: {type: string, enum: [info, warn, alert]}
+        month: {type: string, example: "2026-11"}
+    Adjustment:
+      type: object
+      required: [category]
+      properties:
+        category: {$ref: "#/components/schemas/Category"}
+        pct_change: {type: number, description: "-30 means cut by 30%"}
+        abs_change: {type: number, description: "rupees per month, + or -"}
+    TraceEvent:
+      type: object
+      properties:
+        node: {type: string, description: "tool name, or intent_guard / answer"}
+        status: {type: string, enum: [start, ok, error, refused, finished]}
+        tier_used: {type: [string, "null"]}
+        ms: {type: integer}
+        args: {type: object}
+        result_summary: {type: string}
 paths:
   /health:
     get:
@@ -24,15 +109,94 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Envelope"}
               example: {success: true, data: {status: up}, error: null}
-  /samples:
-    get:
+  /ingest:
+    post:
+      summary: Ingest a statement file (pdf/csv) or pasted SMS text; parse, normalize, categorize, store.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+          application/json:
+            schema:
+              type: object
+              required: [kind, text]
+              properties:
+                kind: {type: string, enum: [sms]}
+                text: {type: string}
+            example: {kind: sms, text: "Rs.499.00 debited from A/c XX1234 on 05-10-26 to NETFLIX. UPI Ref 4321"}
       responses:
         "200":
-          description: seed cases
+          description: parsed rows
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Envelope"}
-  /runs:
+              example:
+                success: true
+                error: null
+                data:
+                  upload_id: up_001
+                  rows:
+                    - {id: tx_001, upload_id: up_001, date: "2026-10-05", amount: 499, direction: dr,
+                       raw_desc: "UPI/NETFLIX/netflix@icici", merchant_norm: netflix, category: Subscriptions,
+                       cat_source: rule, confidence: 1.0, needs_review: false}
+                    - {id: tx_002, upload_id: up_001, date: "2026-10-07", amount: 1240, direction: dr,
+                       raw_desc: "UPI/RAZ*PAYU8823", merchant_norm: "raz payu8823", category: Shopping,
+                       cat_source: ai, confidence: 0.42, needs_review: true}
+                  auto_rate: 0.81
+                  reconciled: {ok: true, opening: 52310.0, closing: 61880.5, computed_closing: 61880.5}
+  /transactions:
+    get:
+      parameters:
+        - {name: month, in: query, schema: {type: string, example: "2026-11"}}
+        - {name: category, in: query, schema: {$ref: "#/components/schemas/Category"}}
+        - {name: needs_review, in: query, schema: {type: boolean}}
+      responses:
+        "200":
+          description: transactions, newest first
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  items:
+                    - {id: tx_002, upload_id: up_001, date: "2026-10-07", amount: 1240, direction: dr,
+                       raw_desc: "UPI/RAZ*PAYU8823", merchant_norm: "raz payu8823", category: Shopping,
+                       cat_source: ai, confidence: 0.42, needs_review: true}
+                  total: 1
+  /transactions/{id}/correct:
+    post:
+      summary: User fixes a category; system learns a rule and returns other matching transactions.
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category]
+              properties:
+                category: {$ref: "#/components/schemas/Category"}
+            example: {category: Groceries}
+      responses:
+        "200":
+          description: learned rule + similar transactions to retro-apply
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  rule: {id: rule_001, match_type: normalized, pattern: "raz payu8823", category: Groceries, hits: 1}
+                  similar_ids: [tx_014, tx_031]
+  /rules/apply:
     post:
       requestBody:
         required: true
@@ -40,49 +204,248 @@ paths:
           application/json:
             schema:
               type: object
-              required: [input]
+              required: [rule_id, transaction_ids]
               properties:
-                input: {type: string}
-                privacy_mode: {type: boolean, default: false}
+                rule_id: {type: string}
+                transaction_ids: {type: array, items: {type: string}}
+            example: {rule_id: rule_001, transaction_ids: [tx_014, tx_031]}
+      responses:
+        "200":
+          description: rule applied
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example: {success: true, error: null, data: {updated: 2}}
+  /profile:
+    get:
+      responses:
+        "200":
+          description: single-row profile
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data: {monthly_income: 85000, fixed_costs: 31500, emergency_fund: 40000,
+                       email: demo@example.com, budgets: {Dining: 3000, Food Delivery: 4000, Shopping: 5000}}
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Profile"}
+            example: {monthly_income: 90000}
+      responses:
+        "200":
+          description: updated profile
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data: {monthly_income: 90000, fixed_costs: 31500, emergency_fund: 40000,
+                       email: demo@example.com, budgets: {Dining: 3000, Food Delivery: 4000, Shopping: 5000}}
+  /goals:
+    get:
+      responses:
+        "200":
+          description: goals
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  items:
+                    - {id: goal_001, name: Emergency fund, target_amount: 100000, saved_amount: 40000, target_date: "2027-06-30"}
+                    - {id: goal_002, name: Goa trip, target_amount: 25000, saved_amount: 0, target_date: "2027-03-31"}
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Goal"}
+            example: {name: Goa trip, target_amount: 25000, target_date: "2027-03-31"}
+      responses:
+        "200":
+          description: created goal
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example: {success: true, error: null,
+                        data: {id: goal_002, name: Goa trip, target_amount: 25000, saved_amount: 0, target_date: "2027-03-31"}}
+  /recurring:
+    get:
+      responses:
+        "200":
+          description: detected recurring payments
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  items:
+                    - {id: rec_001, merchant_norm: netflix, category: Subscriptions, amount: 649, prev_amount: 499,
+                       cadence: monthly, last_seen: "2026-11-05", status: changed, note: "Price up 30% (499 -> 649)"}
+                    - {id: rec_002, merchant_norm: cult.fit, category: Subscriptions, amount: 1499, prev_amount: 1499,
+                       cadence: monthly, last_seen: "2026-11-02", status: unused, note: "No related activity in 60 days"}
+  /simulate:
+    post:
+      summary: What-if. Essentials may be modelled rising but are never suggested as cuts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adjustments]
+              properties:
+                adjustments: {type: array, items: {$ref: "#/components/schemas/Adjustment"}}
+            example: {adjustments: [{category: Dining, pct_change: -30}, {category: Rent, abs_change: 2000}]}
+      responses:
+        "200":
+          description: baseline vs scenario + projected goal dates
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  baseline: {monthly_spend: 61200, monthly_savings: 23800}
+                  scenario: {monthly_spend: 62300, monthly_savings: 22700}
+                  goal_dates:
+                    - {goal_id: goal_001, name: Emergency fund, baseline_date: "2027-02-28", scenario_date: "2027-03-31", on_track: true}
+                  warnings: []
+  /nudges:
+    get:
+      responses:
+        "200":
+          description: in-app nudges for current month
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  items:
+                    - {id: ndg_001, kind: drift, category: Food Delivery, severity: warn, month: "2026-11",
+                       message: "Food Delivery is at 6,850 vs a 4,000 budget with 9 days left."}
+  /report/{month}:
+    get:
+      parameters: [{name: month, in: path, required: true, schema: {type: string, example: "2026-10"}}]
+      responses:
+        "200":
+          description: monthly review
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  month: "2026-10"
+                  income: 85000
+                  spend: 61200
+                  savings: 23800
+                  savings_rate: 0.28
+                  by_category: [{category: Rent, amount: 22000, budget: null}, {category: Food Delivery, amount: 6850, budget: 4000}]
+                  recurring_changes: [{merchant_norm: netflix, from: 499, to: 649}]
+                  goal_progress: [{goal_id: goal_001, name: Emergency fund, pct: 0.4, on_track: true}]
+                  highlights: ["Savings rate 28%", "Food Delivery 71% over budget"]
+  /email/send:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [nudges, report]}
+                month: {type: string}
+            example: {kind: report, month: "2026-10"}
+      responses:
+        "200":
+          description: sent via Resend
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example: {success: true, error: null, data: {id: "re_abc123", to: demo@example.com}}
+  /stats/auto-rate:
+    get:
+      responses:
+        "200":
+          description: share of rows auto-categorized per upload (shows learning)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  series:
+                    - {upload_id: up_001, filename: sms_oct.txt, created_at: "2026-11-21T10:00:00Z", auto_rate: 0.72}
+                    - {upload_id: up_003, filename: sms_nov.txt, created_at: "2026-11-21T10:05:00Z", auto_rate: 0.94}
+  /coach:
+    post:
+      summary: Start a coach run. Intent guard runs first; then <=4 tool calls; stream via /coach/{run_id}/events.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: {type: string}
+                history:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: {type: string, enum: [user, assistant]}
+                      content: {type: string}
+            example: {message: "Can I afford the Goa trip if I cut dining by 30%?", history: []}
       responses:
         "200":
           description: run started
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Envelope"}
-              example: {success: true, data: {run_id: abc123}, error: null}
-  /runs/{run_id}:
+              example: {success: true, error: null, data: {run_id: abc123def456}}
+  /coach/{run_id}/events:
     get:
       parameters: [{name: run_id, in: path, required: true, schema: {type: string}}]
       responses:
         "200":
-          description: events + state
+          description: "SSE: `data: <TraceEvent JSON>` per step; final `event: end`."
           content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Envelope"}
-  /runs/{run_id}/events:
+            text/event-stream:
+              schema: {$ref: "#/components/schemas/TraceEvent"}
+  /coach/{run_id}:
     get:
       parameters: [{name: run_id, in: path, required: true, schema: {type: string}}]
       responses:
         "200":
-          description: "SSE stream of {node, status, tier_used, ms}"
-          content:
-            text/event-stream: {}
-  /runs/{run_id}/resume:
-    post:
-      parameters: [{name: run_id, in: path, required: true, schema: {type: string}}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [approve]
-              properties:
-                approve: {type: boolean}
-      responses:
-        "200":
-          description: resumed
+          description: events so far + final answer (null while running)
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Envelope"}
+              example:
+                success: true
+                error: null
+                data:
+                  events:
+                    - {node: intent_guard, status: ok, tier_used: groq, ms: 180, args: {}, result_summary: "intent=planning"}
+                    - {node: simulate, status: ok, tier_used: null, ms: 12,
+                       args: {adjustments: [{category: Dining, pct_change: -30}]}, result_summary: "savings +900/mo"}
+                  answer: "Cutting dining by 30% frees about 900 a month, so the Goa trip moves to March 2027."
+                  refused: false
