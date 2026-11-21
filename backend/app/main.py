@@ -116,14 +116,28 @@ def list_transactions(month: str | None = None, category: str | None = None,
 
 @app.post("/transactions/{tx_id}/correct")
 def correct_transaction(tx_id: str, body: CorrectIn):
-    """TODO(slice 3): engines.categorize.learn_rule"""
-    return ok(EXAMPLES["correct"])
+    from app.engines.categorize import learn_rule
+
+    try:
+        rule, similar_ids = learn_rule(tx_id, body.category)
+        return ok({"rule": rule, "similar_ids": similar_ids})
+    except ValueError as exc:
+        return fail(str(exc))
+    except Exception:
+        return fail("Could not save transaction correction")
 
 
 @app.post("/rules/apply")
 def rules_apply(body: RuleApplyIn):
-    """TODO(slice 3): engines.categorize.apply_rule"""
-    return ok(EXAMPLES["rules_apply"])
+    from app.engines.categorize import apply_rule
+
+    try:
+        updated = apply_rule(body.rule_id, body.transaction_ids)
+        return ok({"updated": updated})
+    except ValueError as exc:
+        return fail(str(exc))
+    except Exception:
+        return fail("Could not apply category rule")
 
 
 @app.get("/profile")
