@@ -38,6 +38,12 @@ def fail(msg: str):
     return {"success": False, "data": None, "error": msg}
 
 
+def _invalidate() -> None:
+    from app.engines import ledger
+
+    ledger.invalidate()
+
+
 def _safe(fn):
     """Run an engine call; any failure becomes the envelope error (and is logged)."""
     try:
@@ -146,6 +152,7 @@ def correct_transaction(tx_id: str, body: CorrectIn):
 
     try:
         rule, similar_ids = learn_rule(tx_id, body.category)
+        _invalidate()
         return ok({"rule": rule, "similar_ids": similar_ids})
     except ValueError as exc:
         return fail(str(exc))
@@ -160,6 +167,7 @@ def rules_apply(body: RuleApplyIn):
 
     try:
         updated = apply_rule(body.rule_id, body.transaction_ids)
+        _invalidate()
         return ok({"updated": updated})
     except ValueError as exc:
         return fail(str(exc))

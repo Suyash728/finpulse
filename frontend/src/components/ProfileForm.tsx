@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getProfile, putProfile, type Profile } from "@/lib/api";
+import { putProfile, type Profile } from "@/lib/api";
+import { useCached } from "@/lib/cache";
+import { Q } from "@/lib/queries";
 import { emitDataChanged } from "@/lib/events";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +20,8 @@ export function ProfileForm() {
   const [p, setP] = useState<Profile | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { getProfile().then(setP).catch((e) => toast.error("Couldn't load profile", { description: e.message })); }, []);
+  const cached = useCached(...Q.profile).data;
+  useEffect(() => { if (cached && !p) setP(cached); }, [cached, p]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();

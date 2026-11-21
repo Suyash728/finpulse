@@ -51,7 +51,9 @@ def _insights(cats: list[dict], changes: list[dict], rate: float, savings: float
                             "Worth a review.", "category": "Subscriptions", "delta_pct": pct, "tone": "bad"})
     if projection["budget_total"]:
         ok = projection["on_track"]
-        out.append({"text": (f"On pace to spend ₹{projection['projected']:,.0f} this month "
+        done = projection["days_left"] == 0
+        verb = "You spent" if done else "On pace to spend"
+        out.append({"text": (f"{verb} ₹{projection['projected']:,.0f} this month, "
                              f"{'within' if ok else 'above'} your ₹{projection['budget_total']:,.0f} budget."),
                     "category": None, "delta_pct": None, "tone": "good" if ok else "bad"})
     out.append({"text": f"You kept {round(rate * 100)}% of income (₹{savings:,.0f}) this month.",
@@ -60,7 +62,16 @@ def _insights(cats: list[dict], changes: list[dict], rate: float, savings: float
 
 
 def monthly_report(month: str) -> dict:
-    from app.engines.ledger import all_transactions, get_goals, get_profile
+    from app.engines.ledger import (
+        all_transactions,
+        available_months,
+        get_goals,
+        get_profile,
+        latest_month,
+    )
+
+    if month == "latest":
+        month = latest_month()
     from app.engines.recurring import detect_recurring
     from app.engines.simulate import simulate
 
@@ -118,7 +129,7 @@ def monthly_report(month: str) -> dict:
               "pct": round(g["saved_amount"] / g["target_amount"], 4) if g["target_amount"] else 0,
               "on_track": sim.get(g["id"], {}).get("on_track", False)} for g in get_goals()["items"]]
     insights = _insights(cats, changes, rate, savings, projection)
-    return {"month": month, "prev_month": prev_m, "income": income, "spend": spend, "savings": savings,
+    return {"month": month, "available_months": available_months(), "prev_month": prev_m, "income": income, "spend": spend, "savings": savings,
             "savings_rate": rate, "prev_spend": round(sum(prev_cat.values()), 2),
             "by_category": cats, "daily": [{"date": f"{month}-{d + 1:02d}", "amount": per_day[d]} for d in range(dim)],
             "projection": projection, "recurring_changes": changes, "goal_progress": goals,

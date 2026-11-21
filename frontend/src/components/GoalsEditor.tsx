@@ -1,26 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { createGoal, getGoals, simulate, type Goal, type SimulateResult } from "@/lib/api";
-import { emitDataChanged, onDataChanged } from "@/lib/events";
+import { createGoal } from "@/lib/api";
+import { useCached } from "@/lib/cache";
+import { emitDataChanged } from "@/lib/events";
+import { Q } from "@/lib/queries";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { GoalCard } from "@/components/GoalCard";
 
 export function GoalsEditor() {
-  const [goals, setGoals] = useState<Goal[] | null>(null);
-  const [base, setBase] = useState<SimulateResult | null>(null);
+  const goals = useCached(...Q.goals).data?.items ?? null;
+  const base = useCached(...Q.baseline).data ?? null;
   const [form, setForm] = useState({ name: "", target_amount: "", target_date: "" });
   const [adding, setAdding] = useState(false);
 
-  const load = useCallback(() => {
-    getGoals().then((d) => setGoals(d.items)).catch(() => setGoals([]));
-    simulate([]).then(setBase).catch(() => setBase(null));
-  }, []);
-  useEffect(() => { load(); return onDataChanged(load); }, [load]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();

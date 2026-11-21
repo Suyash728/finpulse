@@ -7,7 +7,7 @@ from app.engines.parse import (
     parse_sms,
 )
 
-SAMPLES = Path(__file__).resolve().parents[2] / "frontend" / "public" / "samples"
+SAMPLES = Path(__file__).resolve().parent / "fixtures"  # frozen messy Oct/Nov sample formats
 
 
 def check_standardized_rows(rows):

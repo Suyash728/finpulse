@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 VARIABLE = {"Transfers", "Income", "Shopping", "Fuel", "Other", "Groceries", "Dining", "Food Delivery",
-            "Travel", "Entertainment"}  # one-off-ish spending, not bills
+            "Travel", "Entertainment", "Medical"}  # one-off-ish spending, not bills
 PRICE_CATEGORIES = {"Subscriptions", "Insurance"}  # bills like electricity vary naturally
 SUBSCRIPTION_NAMES = ("netflix", "spotify", "cultfit", "prime", "hotstar", "youtube", "icloud", "tata play")
 FITNESS = ("cultfit", "gym", "fitness")

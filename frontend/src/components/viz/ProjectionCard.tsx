@@ -39,7 +39,8 @@ export function ProjectionCard({ p }: { p: Projection }) {
               </linearGradient>
             </defs>
             <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={10} interval={4} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={inrCompact} width={48} stroke="hsl(var(--muted-foreground))" />
+            <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={inrCompact} width={48} stroke="hsl(var(--muted-foreground))"
+              domain={[0, (max: number) => Math.ceil((Math.max(max, p.budget_total) * 1.05) / 10000) * 10000]} />
             <Tooltip formatter={(v: number) => inr(v)} labelFormatter={(d) => `Day ${d}`}
               contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
             {p.budget_total > 0 && (

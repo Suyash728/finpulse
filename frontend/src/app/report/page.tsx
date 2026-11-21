@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { availableMonths, getRecurring, getReport, type RecurringItem, type Report } from "@/lib/api";
-import { onDataChanged } from "@/lib/events";
+import { getReport, type RecurringItem, type Report } from "@/lib/api";
+import { useCached } from "@/lib/cache";
+import { Q } from "@/lib/queries";
 import { fmtMonth, inr, pct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EmailButton } from "@/components/EmailButton";
@@ -25,28 +26,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function ReportPage() {
-  const [months, setMonths] = useState<string[]>([]);
-  const [month, setMonth] = useState<string | null>(null);
-  const [report, setReport] = useState<Report | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [recurring, setRecurring] = useState<RecurringItem[]>([]);
-
-  useEffect(() => {
-    const load = () => availableMonths().then((ms) => { setMonths(ms); setMonth((m) => m ?? ms[0]); });
-    const rec = () => getRecurring().then((d) => setRecurring(d.items)).catch(() => setRecurring([]));
-    load();
-    rec();
-    const off1 = onDataChanged(load);
-    const off2 = onDataChanged(rec);
-    return () => { off1(); off2(); };
-  }, []);
-
-  useEffect(() => {
-    if (!month) return;
-    setReport(null);
-    setError(null);
-    getReport(month).then(setReport).catch((e) => setError((e as Error).message));
-  }, [month]);
+  const latest = useCached(...Q.reportLatest).data;
+  const [picked, setPicked] = useState<string | null>(null);
+  const month = picked ?? latest?.month ?? null;
+  const months = latest?.available_months ?? (month ? [month] : []);
+  const other = month && latest && month !== latest.month ? month : null;
+  const one = useCached<Report>(other ? `report:${other}` : null, () => getReport(other as string));
+  const report: Report | null = (other ? one.data : latest) ?? null;
+  const error = other ? one.error ?? null : null;
+  const recurring: RecurringItem[] = useCached(...Q.recurring).data?.items ?? [];
+  const setMonth = setPicked;
 
   const rows = report ? [...report.by_category].sort((a, b) => b.amount - a.amount).slice(0, 8) : [];
   const max = Math.max(1, ...rows.map((r) => Math.max(r.amount, r.budget ?? 0)));

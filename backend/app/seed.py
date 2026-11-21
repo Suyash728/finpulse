@@ -15,9 +15,9 @@ SAMPLE_FILES = ["sms_oct.txt", "statement_oct.csv", "sms_nov.txt", "statement_no
                 "statement_nov.pdf"]
 
 BUDGETS = {
-    "Rent": 22000, "Utilities": 3000, "Groceries": 6000, "Medical": 1500, "EMI": 4500,
-    "Insurance": 1000, "Education": 0, "Dining": 3000, "Food Delivery": 4000, "Shopping": 5000,
-    "Travel": 3000, "Entertainment": 1500, "Subscriptions": 2500, "Fuel": 3000, "Transfers": 0,
+    "Rent": 22000, "Utilities": 3500, "Groceries": 6000, "Medical": 1500, "EMI": 4500,
+    "Insurance": 3500, "Education": 0, "Dining": 3000, "Food Delivery": 4000, "Shopping": 5000,
+    "Travel": 3000, "Entertainment": 1500, "Subscriptions": 2500, "Fuel": 4500, "Transfers": 0,
     "Other": 2000,
 }
 
