@@ -9,11 +9,13 @@ import {
 import { onDataChanged } from "@/lib/events";
 import { AlertList } from "@/components/AlertList";
 import { AutoRateChip } from "@/components/AutoRateChip";
-import { CategoryBars } from "@/components/CategoryBars";
 import { EmailButton } from "@/components/EmailButton";
 import { GoalCard } from "@/components/GoalCard";
 import { IngestSheet } from "@/components/IngestSheet";
 import { KpiStrip } from "@/components/KpiStrip";
+import { BudgetRings } from "@/components/viz/BudgetRings";
+import { CategoryDonut } from "@/components/viz/CategoryDonut";
+import { ProjectionCard } from "@/components/viz/ProjectionCard";
 import { NudgeRows } from "@/components/NudgeRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -53,25 +55,37 @@ export default function HomePage() {
       </div>
       <KpiStrip report={report} />
       <div className="grid gap-3 lg:grid-cols-3 [&>*]:min-w-0">
-        <div className="space-y-3 lg:col-span-2">
+        <div className="space-y-3 lg:col-span-2 [&>*]:min-w-0">
           <Section title="Alerts" action={<EmailButton kind="nudges" label="Email me these" />}>
             <AlertList recurring={recurring}>
               <NudgeRows nudges={nudges} />
             </AlertList>
           </Section>
-          <Section title="Where the money went" action={<Link href="/transactions" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">See all</Link>}>
-            <CategoryBars rows={report?.by_category ?? []} />
+          {report?.projection && (
+            <Section title="Month projection">
+              <ProjectionCard p={report.projection} />
+            </Section>
+          )}
+        </div>
+        <div className="space-y-3 [&>*]:min-w-0">
+          <Section title="Spending by category" action={<Link href="/report" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">Report</Link>}>
+            {report ? <CategoryDonut report={report} /> : <div className="h-48 animate-pulse rounded-md bg-muted" />}
+          </Section>
+          <Section title="Goals" action={<Link href="/plan" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">Plan</Link>}>
+            <div className="space-y-2">
+              {goals.length === 0 && <p className="text-sm text-muted-foreground">No goals yet.</p>}
+              {goals.map((g) => (
+                <GoalCard key={g.id ?? g.name} goal={g} projection={base?.goal_dates.find((d) => d.goal_id === g.id)} />
+              ))}
+            </div>
           </Section>
         </div>
-        <Section title="Goals" action={<Link href="/plan" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">Plan</Link>}>
-          <div className="space-y-2">
-            {goals.length === 0 && <p className="text-sm text-muted-foreground">No goals yet.</p>}
-            {goals.map((g) => (
-              <GoalCard key={g.id ?? g.name} goal={g} projection={base?.goal_dates.find((d) => d.goal_id === g.id)} />
-            ))}
-          </div>
-        </Section>
       </div>
+      {report && (
+        <Section title="Monthly budgets" action={<Link href="/transactions" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">See all</Link>}>
+          <BudgetRings report={report} />
+        </Section>
+      )}
     </div>
   );
 }

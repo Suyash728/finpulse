@@ -226,39 +226,34 @@ def categorize(rows: list[dict]) -> list[dict]:
         },
     ]
 
-    predictions: dict[int, tuple[str, float]] = {}
+    valid_indices = {index for index, _ in pending}
 
-    try:
+    def _ask(msgs: list[dict], first: bool) -> dict[int, tuple[str, float]]:
         # Plan: fast model for categorising batches (own Groq quota); Gemini if Groq is limited.
+        # gpt-oss is a reasoning model: keep effort low and leave room for the JSON.
         try:
-            response = llm.chat(messages, tiers=("groq",), model="openai/gpt-oss-20b",
-                                temperature=0, response_format={"type": "json_object"})
-        except llm.AllTiersFailed:
-            response = llm.chat(messages, tiers=("gemini", "groq"), temperature=0,
-                                response_format={"type": "json_object"})
+            if first:
+                try:
+                    response = llm.chat(msgs, tiers=("groq",), model="openai/gpt-oss-20b", temperature=0,
+                                        response_format={"type": "json_object"}, max_tokens=6000,
+                                        reasoning_effort="low")
+                except llm.AllTiersFailed:
+                    response = llm.chat(msgs, tiers=("gemini", "groq"), temperature=0,
+                                        response_format={"type": "json_object"}, max_tokens=6000)
+            else:
+                response = llm.chat(msgs, tiers=("gemini", "groq"), temperature=0,
+                                    response_format={"type": "json_object"}, max_tokens=6000)
+            got = _parse_llm_response(getattr(response, "text", None))
+            return {i: p for i, p in got.items() if i in valid_indices}
+        except (llm.AllTiersFailed, ValueError, TypeError, KeyError, AttributeError):
+            return {}  # unknown predictions remain visible in the review queue
 
-        predictions = _parse_llm_response(
-            getattr(response, "text", None)
-        )
-
-        # Ignore predictions that do not correspond to pending transactions.
-        valid_indices = {index for index, _ in pending}
-        predictions = {
-            index: prediction
-            for index, prediction in predictions.items()
-            if index in valid_indices
-        }
-
-    except (
-        llm.AllTiersFailed,
-        ValueError,
-        TypeError,
-        KeyError,
-        AttributeError,
-    ):
-        # Unknown predictions remain visible in the review queue.
-        pass
-
+    predictions = _ask(messages, first=True)
+    missing = [t for t in transactions if t["index"] not in predictions]
+    if missing:  # second pass only for rows the first call dropped
+        retry = [messages[0], {"role": "user", "content": json.dumps(
+            {"correction_examples": examples, "transactions": missing}, ensure_ascii=False, default=str)}]
+        predictions.update(_ask(retry, first=False))
     for index, row in pending:
         category, confidence = predictions.get(index, ("Other", 0.0))
 

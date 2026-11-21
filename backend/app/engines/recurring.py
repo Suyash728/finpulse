@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date, timedelta
 
-PRICE_CATEGORIES = {"Subscriptions", "Entertainment", "Insurance"}  # bills like electricity vary naturally
+VARIABLE = {"Transfers", "Income", "Shopping", "Fuel", "Other", "Groceries", "Dining", "Food Delivery",
+            "Travel", "Entertainment"}  # one-off-ish spending, not bills
+PRICE_CATEGORIES = {"Subscriptions", "Insurance"}  # bills like electricity vary naturally
+SUBSCRIPTION_NAMES = ("netflix", "spotify", "cultfit", "prime", "hotstar", "youtube", "icloud", "tata play")
 FITNESS = ("cultfit", "gym", "fitness")
 
 
@@ -16,7 +20,8 @@ def detect_recurring(transactions: list[dict]) -> list[dict]:
     """
     by_merchant: dict[str, list[dict]] = defaultdict(list)
     for t in transactions:
-        if t["direction"] == "dr" and t["category"] not in ("Transfers", "Income"):
+        is_sub = any(k in t["merchant_norm"] for k in SUBSCRIPTION_NAMES)
+        if t["direction"] == "dr" and (is_sub or t["category"] not in VARIABLE):
             by_merchant[t["merchant_norm"]].append(t)
     names = " ".join(by_merchant)
     items = []
@@ -31,12 +36,13 @@ def detect_recurring(transactions: list[dict]) -> list[dict]:
         amt, prev_amt = float(last["amount"]), float(prev["amount"])
         change = (amt - prev_amt) / prev_amt if prev_amt else 0
         status, note = "active", f"Monthly, last paid {last['date']}"
-        if abs(change) > 0.05 and last["category"] in PRICE_CATEGORIES:
+        if abs(change) > 0.05 and (last["category"] in PRICE_CATEGORIES or any(k in m for k in SUBSCRIPTION_NAMES)):
             status = "changed"
             note = f"Price {'up' if change > 0 else 'down'} {abs(round(change * 100))}% (₹{prev_amt:,.0f} → ₹{amt:,.0f})"
         elif any(k in m for k in FITNESS) and not any(k in n for n in names.split() for k in ("decathlon", "sports")):
             status, note = "unused", "No related fitness activity found while you keep paying"
-        items.append({"id": m, "merchant_norm": m, "category": last["category"], "amount": amt,
+        next_due = (date.fromisoformat(last["date"]) + timedelta(days=30)).isoformat()
+        items.append({"id": m, "merchant_norm": m, "category": last["category"], "amount": amt, "next_due": next_due,
                       "prev_amount": prev_amt, "cadence": "monthly", "last_seen": last["date"],
                       "status": status, "note": note})
     order = {"changed": 0, "unused": 1, "active": 2}
