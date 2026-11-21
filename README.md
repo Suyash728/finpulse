@@ -61,18 +61,18 @@ bash scripts/smoke_demo.sh
 ## Features vs PS4
 | # | PS4 requirement | FinPulse | Status |
 |---|---|---|---|
-| 1 | Ingest messy statements (PDF, CSV, SMS) + auto-categorize | SMS + CSV + PDF parsers, rules → AI categorizer, auto-rate chart | TODO |
-| 2 | Correction loop that learns rules | Correct → rule learned → retro-apply to similar | TODO |
-| 3 | Recurring/subscription detection + change/unused alerts | active / changed / unused badges | TODO |
-| 4 | Persistent profile: income, fixed costs, emergency fund, goals | Plan tab | TODO |
-| 5 | Goal planner with what-if simulation | `/simulate`, baseline vs scenario goal dates | TODO |
-| 6 | Nudges when spending drifts | In-app drift nudges | TODO |
-| 7 | Monthly review report | Report tab | TODO |
-| 8 | Guardrail: no specific securities | Intent pre-check → refusal + education | TODO |
-| + | Email nudges + report | Resend, button-triggered | TODO |
-| + | Installable PWA, mobile-first, light/dark | manifest + service worker | Shell done |
-| + | Essentials never suggested as cuts | Essentials rule in coach + simulator | TODO |
-| + | Transparent agent | Live tool-call trace (tier, ms, args, result) | TODO |
+| 1 | Ingest messy statements (PDF, CSV, SMS) + auto-categorize | SMS + CSV + PDF parsers, rules → AI categorizer, auto-rate chip | ✅ Live |
+| 2 | Correction loop that learns rules | Correct → rule learned → retro-apply to similar; next month shows **Learned** | ✅ Live |
+| 3 | Recurring/subscription detection + change/unused alerts | Netflix price change, unused gym, on Home | ✅ Live |
+| 4 | Persistent profile: income, fixed costs, emergency fund, goals | Plan tab (Supabase) | ✅ Live |
+| 5 | Goal planner with what-if simulation | Sliders → `/simulate` → goal dates move live | ✅ Live |
+| 6 | Nudges when spending drifts | Drift vs pro-rated budget on Home | ✅ Live |
+| 7 | Monthly review report | Report tab (stats + highlights) | ✅ Live |
+| 8 | Guardrail: no specific securities | Intent pre-check → refusal + education | ✅ Live |
+| + | Email nudges + report | Resend, button-triggered | ✅ Live |
+| + | Installable PWA, mobile-first, light/dark | manifest + service worker + Install button | ✅ Live |
+| + | Essentials never suggested as cuts | Coach post-check + simulator ignores essential cuts + UI offers no essential sliders | ✅ Live |
+| + | Transparent agent + no invented numbers | Live tool-call trace; numbers guard rejects ₹ figures not in tool results | ✅ Live |
 
 ## Guardrails
 - **No securities advice:** an intent check runs before the agent. Stock, fund or crypto pick requests get a
