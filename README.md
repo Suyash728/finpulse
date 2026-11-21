@@ -3,7 +3,9 @@
 > A mobile-first finance coach that turns messy bank SMS and statements into a living money model. It learns
 > from your corrections, catches subscription creep, and shows "what if" in real rupees.
 
-**Live demo:** TODO (Vercel URL) · **API:** TODO (Render URL) · **Video:** TODO
+**Live demo:** https://finpulse-sandy-five.vercel.app · **API:** https://finpulse-x2b7.onrender.com/health · **Video:** TODO
+
+> The API runs on Render's free tier and sleeps when idle: the first request can take ~50 s.
 
 ## Problem
 Salaried users in India get money data as hundreds of bank/UPI SMS, password-protected PDFs and CSV exports with
