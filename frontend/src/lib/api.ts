@@ -82,3 +82,25 @@ export function sse<E>(path: string, onEvent: (e: E) => void, onEnd?: () => void
   src.onerror = () => { src.close(); onEnd?.(); };
   return () => src.close();
 }
+
+// ---------- endpoint helpers (slice 1) ----------
+export type TxnFilters = { month?: string; category?: Category; needs_review?: boolean };
+export type CorrectResult = { rule: Rule; similar_ids: string[] };
+export type AutoRatePoint = { upload_id: string; filename: string; created_at: string; auto_rate: number };
+
+const qs = (p: Record<string, string | boolean | undefined>) => {
+  const s = new URLSearchParams();
+  Object.entries(p).forEach(([k, v]) => v !== undefined && v !== "" && s.set(k, String(v)));
+  const str = s.toString();
+  return str ? `?${str}` : "";
+};
+
+export const ingestSms = (text: string) => post<IngestResult>("/ingest", { kind: "sms", text });
+export const ingestFile = (file: File | Blob, name?: string) => postFile<IngestResult>("/ingest", file, name);
+export const listTransactions = (f: TxnFilters = {}) =>
+  get<{ items: Transaction[]; total: number }>(`/transactions${qs(f)}`);
+export const correctTransaction = (id: string, category: Category) =>
+  post<CorrectResult>(`/transactions/${encodeURIComponent(id)}/correct`, { category });
+export const applyRule = (rule_id: string, transaction_ids: string[]) =>
+  post<{ updated: number }>("/rules/apply", { rule_id, transaction_ids });
+export const getAutoRate = () => get<{ series: AutoRatePoint[] }>("/stats/auto-rate");
