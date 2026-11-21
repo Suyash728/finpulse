@@ -17,6 +17,8 @@ const config: Config = {
         accent: { DEFAULT: c("accent"), foreground: c("accent-foreground") },
         card: { DEFAULT: c("card"), foreground: c("card-foreground") },
         popover: { DEFAULT: c("popover"), foreground: c("popover-foreground") },
+        positive: c("positive"), negative: c("negative"), warning: c("warning"),
+        chart: { 1: c("chart-1"), 2: c("chart-2"), 3: c("chart-3"), 4: c("chart-4"), 5: c("chart-5") },
       },
       borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" },
     },
