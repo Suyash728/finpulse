@@ -129,3 +129,18 @@ export type ChatTurn = { role: "user" | "assistant"; content: string };
 export const startCoach = (message: string, history: ChatTurn[]) =>
   post<{ run_id: string }>("/coach", { message, history });
 export const getCoach = (runId: string) => get<CoachResult>(`/coach/${encodeURIComponent(runId)}`);
+
+// ---------- endpoint helpers (slice 4) ----------
+export const getNudges = () => get<{ items: Nudge[] }>("/nudges");
+export const sendEmail = (kind: "nudges" | "report", month?: string) =>
+  post<{ id: string; to: string }>("/email/send", month ? { kind, month } : { kind });
+
+/** Months that have transactions, newest first (fallback: current month). */
+export async function availableMonths(): Promise<string[]> {
+  try {
+    const { items } = await listTransactions();
+    const ms = Array.from(new Set(items.map((t) => t.date.slice(0, 7)))).sort().reverse();
+    if (ms.length) return ms;
+  } catch { /* fall through */ }
+  return [new Date().toISOString().slice(0, 7)];
+}
