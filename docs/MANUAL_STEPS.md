@@ -55,19 +55,23 @@ bash scripts/smoke_demo.sh              # expect SMOKE PASS
       `NEXT_PUBLIC_API_URL=http://localhost:4010`.
 
 ## 5. Deploy: do a first deploy EARLY (by ~18:30), redeploy at 22:15
-### API on Render
-- [ ] render.com → New → **Blueprint** → pick the repo → it reads `render.yaml` (service `finpulse-api`, root `backend`,
-      region Singapore).
-- [ ] Fill the `sync: false` env vars: GROQ_API_KEY, GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY,
-      RESEND_API_KEY, DEMO_EMAIL, CORS_ORIGINS (set after Vercel; see below).
-- [ ] Wait for deploy → open `https://<finpulse-api>.onrender.com/health` → `{"success":true,...}`.
-- [ ] Free tier sleeps after ~15 min idle (cold start ~50 s). **Open /health 2 min before the demo.**
+### API on Render (plain free Web Service; Blueprints need a card)
+- [x] render.com → New → **Web Service** → repo `Suyash728/finpulse`, branch `main`, region **Singapore**,
+      root `backend`, runtime Python 3, instance **Free**, health check path `/health`.
+- [x] Build: `pip install uv && uv sync --frozen --no-dev`
+- [ ] Start: `uv run --frozen --no-dev uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+      (without `--frozen --no-dev`, `uv run` installs dev deps on every cold start)
+- [x] Env: `PYTHON_VERSION=3.12.13` (**required**: Render defaults to 3.14), GROQ_API_KEY, GEMINI_API_KEY,
+      SUPABASE_URL, SUPABASE_SERVICE_KEY, RESEND_API_KEY, EMAIL_FROM, DEMO_EMAIL, CORS_ORIGINS.
+- [x] Live: https://finpulse-x2b7.onrender.com/health
+- Harmless log lines: `VIRTUAL_ENV ... will be ignored`, `GET / 404`.
+- Free tier sleeps after ~15 min idle (cold start ~50 s). **Open /health 2 min before the demo.**
 
 ### Frontend on Vercel
 - [ ] vercel.com → Add New Project → import repo → **Root Directory: `frontend`** (framework auto: Next.js).
-- [ ] Env var: `NEXT_PUBLIC_API_URL=https://<finpulse-api>.onrender.com` (no trailing slash) → Deploy.
+- [ ] Env var: `NEXT_PUBLIC_API_URL=https://finpulse-x2b7.onrender.com` (no trailing slash) → Deploy.
 - [ ] Back on Render: `CORS_ORIGINS=https://<your-app>.vercel.app` (comma-separate if you also want localhost) → redeploy.
-- [ ] Smoke the cloud API: `API=https://<finpulse-api>.onrender.com bash scripts/smoke_demo.sh`.
+- [ ] Smoke the cloud API: `API=https://finpulse-x2b7.onrender.com bash scripts/smoke_demo.sh`.
 
 ## 6. PWA install check (needs the HTTPS Vercel URL)
 - [ ] Android Chrome: menu → *Install app* → opens standalone with the teal icon.

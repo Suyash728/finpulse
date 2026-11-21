@@ -1,3 +1,5 @@
+# Reference only: we deploy as a plain free Web Service (Blueprints need a card).
+# Copy these settings into the Render dashboard by hand.
 services:
   - type: web
     name: finpulse-api
@@ -5,7 +7,7 @@ services:
     region: singapore
     rootDir: backend
     buildCommand: pip install uv && uv sync --frozen --no-dev
-    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run --frozen --no-dev uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - {key: PYTHON_VERSION, value: "3.12.13"}
