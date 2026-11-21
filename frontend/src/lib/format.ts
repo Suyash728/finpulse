@@ -7,7 +7,10 @@ const inrFmt = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 
-export const inr = (n: number) => inrFmt.format(n);
+const inrWhole = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+
+/** Display only: whole rupees from ₹1,000 up, paise below. Values themselves come from the API. */
+export const inr = (n: number) => (Math.abs(n) >= 1000 ? inrWhole : inrFmt).format(n);
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`;
 

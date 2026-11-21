@@ -131,8 +131,12 @@ def get_goals() -> dict:
     seed_profile_goals()
     items = get_client().table("goals").select("id,name,target_amount,saved_amount,target_date") \
         .order("target_date").execute().data
+    today = date.today()
     for g in items:
         g["target_amount"], g["saved_amount"] = float(g["target_amount"]), float(g["saved_amount"])
+        td = date.fromisoformat(g["target_date"])
+        months = max(1, (td.year - today.year) * 12 + td.month - today.month)
+        g["monthly_needed"] = round(max(0.0, g["target_amount"] - g["saved_amount"]) / months, 2)
     return {"items": items}
 
 

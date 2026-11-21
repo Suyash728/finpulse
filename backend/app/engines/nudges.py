@@ -6,6 +6,8 @@ import calendar
 
 from app.engines.categorize import ESSENTIAL
 
+FIXED = {"Rent", "EMI", "Insurance", "Education", "Subscriptions"}  # paid once a month: pace is meaningless
+
 
 def compute_nudges(month: str | None = None) -> list[dict]:
     from app.engines.ledger import all_transactions, get_profile
@@ -23,12 +25,13 @@ def compute_nudges(month: str | None = None) -> list[dict]:
     out = []
     for cat, budget in budgets.items():
         budget = float(budget or 0)
-        if budget <= 0:
+        if budget <= 0 or cat == "Other":
             continue
         spent = round(sum(t["amount"] for t in in_month if t["category"] == cat), 2)
         expected = budget * day / dim
         pct = round(spent / budget * 100)
-        if (spent >= 0.75 * budget and day < 20) or (expected and spent / expected > 1.25 and spent > 0.3 * budget):
+        drift = (spent >= 0.75 * budget and day < 20) or (expected and spent / expected > 1.25 and spent > 0.3 * budget)
+        if (cat in FIXED and spent > budget) or (cat not in FIXED and drift):
             msg = (f"{cat} is above its usual level: ₹{spent:,.0f} of ₹{budget:,.0f} by day {day}."
                    if cat in ESSENTIAL else
                    f"{cat} at {pct}% of budget on day {day} (₹{spent:,.0f} of ₹{budget:,.0f}).")

@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Sparkles } from "lucide-react";
-import { availableMonths, getReport, type Report } from "@/lib/api";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { availableMonths, getRecurring, getReport, type RecurringItem, type Report } from "@/lib/api";
 import { onDataChanged } from "@/lib/events";
-import { fmtMonth, inr, pct, titleCase } from "@/lib/format";
+import { fmtMonth, inr, pct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EmailButton } from "@/components/EmailButton";
 import { StatTile } from "@/components/placeholder";
+import { InsightCards } from "@/components/viz/InsightCards";
+import { MonthCompareBars } from "@/components/viz/MonthCompareBars";
+import { RecurringList } from "@/components/viz/RecurringList";
+import { SpendCalendar } from "@/components/viz/SpendCalendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -25,11 +29,16 @@ export default function ReportPage() {
   const [month, setMonth] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recurring, setRecurring] = useState<RecurringItem[]>([]);
 
   useEffect(() => {
     const load = () => availableMonths().then((ms) => { setMonths(ms); setMonth((m) => m ?? ms[0]); });
+    const rec = () => getRecurring().then((d) => setRecurring(d.items)).catch(() => setRecurring([]));
     load();
-    return onDataChanged(load);
+    rec();
+    const off1 = onDataChanged(load);
+    const off2 = onDataChanged(rec);
+    return () => { off1(); off2(); };
   }, []);
 
   useEffect(() => {
@@ -64,15 +73,12 @@ export default function ReportPage() {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3 [&>*]:min-w-0">
-        <div className="space-y-3 lg:col-span-2">
-          <Section title="Highlights">
-            {report && report.highlights.length > 0 ? (
-              <ul className="space-y-1.5 text-sm">
-                {report.highlights.map((h, i) => (
-                  <li key={i} className="flex gap-2"><Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />{h}</li>
-                ))}
-              </ul>
-            ) : <p className="text-sm text-muted-foreground">{report ? "Nothing notable this month." : "Loading…"}</p>}
+        <div className="space-y-3 lg:col-span-2 [&>*]:min-w-0">
+          <Section title="Insights">
+            {report ? <InsightCards items={report.insights ?? []} /> : <div className="h-40 animate-pulse rounded-md bg-muted" />}
+          </Section>
+          <Section title="Month vs last month">
+            {report ? <MonthCompareBars report={report} /> : <div className="h-56 animate-pulse rounded-md bg-muted" />}
           </Section>
           <Section title="Categories vs budget">
             <ul className="space-y-2.5">
@@ -102,18 +108,12 @@ export default function ReportPage() {
             </ul>
           </Section>
         </div>
-        <div className="space-y-3">
-          <Section title="Subscription changes">
-            {report && report.recurring_changes.length > 0 ? (
-              <ul className="divide-y text-sm">
-                {report.recurring_changes.map((c) => (
-                  <li key={c.merchant_norm} className="flex justify-between gap-2 py-1.5 tabular-nums">
-                    <span>{titleCase(c.merchant_norm)}</span>
-                    <span>{inr(c.from)} → <span className={c.to > c.from ? "text-negative" : "text-positive"}>{inr(c.to)}</span></span>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="text-sm text-muted-foreground">No changes.</p>}
+        <div className="space-y-3 [&>*]:min-w-0">
+          <Section title="Spending calendar">
+            {report ? <SpendCalendar report={report} /> : <div className="h-48 animate-pulse rounded-md bg-muted" />}
+          </Section>
+          <Section title="Recurring charges">
+            <RecurringList items={recurring} />
           </Section>
           <Section title="Goal progress">
             {report && report.goal_progress.length > 0 ? (

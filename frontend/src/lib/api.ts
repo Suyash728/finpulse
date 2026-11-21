@@ -28,10 +28,13 @@ export type Profile = {
   monthly_income: number; fixed_costs: number; emergency_fund: number; email: string | null;
   budgets: Partial<Record<Category, number>>;
 };
-export type Goal = { id?: string; name: string; target_amount: number; saved_amount?: number; target_date: string };
+export type Goal = {
+  id?: string; name: string; target_amount: number; saved_amount?: number; target_date: string; monthly_needed?: number;
+};
 export type RecurringItem = {
   id: string; merchant_norm: string; category: Category; amount: number; prev_amount: number | null;
   cadence: "monthly" | "weekly" | "yearly"; last_seen: string; status: "active" | "changed" | "unused"; note?: string;
+  next_due?: string;
 };
 export type Nudge = {
   id: string; kind: "drift" | "price_change" | "unused" | "essentials_over_income";
@@ -44,9 +47,19 @@ export type SimulateResult = {
   goal_dates: { goal_id: string; name: string; baseline_date: string; scenario_date: string; on_track: boolean }[];
   warnings: string[];
 };
+export type Insight = { text: string; category: string | null; delta_pct: number | null; tone: "good" | "bad" };
+export type Projection = {
+  as_of_day: number; days_in_month: number; days_left: number; spent_so_far: number; avg_per_day: number;
+  variable_avg_per_day: number; projected: number; budget_total: number; on_track: boolean;
+  cumulative: { day: number; actual: number | null; projected: number | null }[];
+};
 export type Report = {
   month: string; income: number; spend: number; savings: number; savings_rate: number;
-  by_category: { category: Category; amount: number; budget: number | null }[];
+  prev_month?: string; prev_spend?: number;
+  by_category: { category: Category; amount: number; budget: number | null; prev_amount?: number; change_pct?: number | null }[];
+  daily?: { date: string; amount: number }[];
+  projection?: Projection;
+  insights?: Insight[];
   recurring_changes: { merchant_norm: string; from: number; to: number }[];
   goal_progress: { goal_id: string; name: string; pct: number; on_track: boolean }[];
   highlights: string[];

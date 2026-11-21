@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FinPulse API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Frozen contract for FinPulse (PS4 personal finance coach).
     Every JSON response is the envelope {success, data, error}. All rupee figures are computed in Python.
@@ -62,6 +62,7 @@ components:
         target_amount: {type: number}
         saved_amount: {type: number, default: 0}
         target_date: {type: string, format: date}
+        monthly_needed: {type: number, readOnly: true, description: "(target - saved) / months left, computed in Python"}
     RecurringItem:
       type: object
       properties:
@@ -74,6 +75,7 @@ components:
         last_seen: {type: string, format: date}
         status: {type: string, enum: [active, changed, unused]}
         note: {type: string}
+        next_due: {type: string, format: date, description: "last_seen + 30 days"}
     Nudge:
       type: object
       properties:
@@ -342,7 +344,12 @@ paths:
       parameters: [{name: month, in: path, required: true, schema: {type: string, example: "2026-10"}}]
       responses:
         "200":
-          description: monthly review
+          description: |
+            Monthly review. All figures computed in Python. by_category rows also carry prev_amount and
+            change_pct (vs prev_month). Chart fields: daily[{date, amount}], projection{as_of_day,
+            days_in_month, days_left, spent_so_far, avg_per_day, variable_avg_per_day, projected,
+            budget_total, on_track, cumulative[{day, actual|null, projected|null}]}, insights[{text,
+            category|null, delta_pct|null, tone: good|bad}], prev_month, prev_spend.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Envelope"}
