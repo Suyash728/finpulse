@@ -6,6 +6,7 @@ import { Activity } from "lucide-react";
 import { NAV } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { InstallButton } from "@/components/InstallButton";
 
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 const groups = Array.from(new Set(NAV.map((n) => n.group)));
@@ -56,7 +57,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Activity className="h-4 w-4" />
           </span>
           <h1 className="text-base font-semibold">{title}</h1>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <InstallButton />
             <ThemeToggle />
           </div>
         </header>

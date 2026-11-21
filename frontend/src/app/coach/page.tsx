@@ -39,7 +39,7 @@ async function chartFor(events: TraceEvent[]): Promise<SimulateResult | null> {
 function TraceDetails({ events }: { events: TraceEvent[] }) {
   const tools = events.filter((e) => e.node !== "answer" && !e.node.endsWith("_guard")).length;
   return (
-    <details className="group mt-2 md:hidden">
+    <details className="group mt-2 lg:hidden">
       <summary className="flex h-9 cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground">
         <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
         Trace · {tools} tool call{tools === 1 ? "" : "s"}
@@ -97,8 +97,8 @@ export default function CoachPage() {
   const lastEvents = [...msgs].reverse().find((m) => m.role === "assistant")?.events ?? [];
 
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-start">
-      <section className="flex min-h-[60dvh] flex-1 flex-col gap-3">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      <section className="flex min-h-[60dvh] min-w-0 flex-1 flex-col gap-3">
         {msgs.length === 0 && (
           <div className="space-y-3 rounded-xl border bg-card p-4">
             <p className="text-sm">
@@ -158,7 +158,7 @@ export default function CoachPage() {
         </form>
       </section>
 
-      <div className="hidden md:sticky md:top-20 md:block">
+      <div className="hidden lg:sticky lg:top-20 lg:block">
         <TracePanel events={lastEvents} />
       </div>
     </div>
