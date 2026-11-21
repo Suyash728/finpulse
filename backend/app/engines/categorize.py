@@ -229,11 +229,13 @@ def categorize(rows: list[dict]) -> list[dict]:
     predictions: dict[int, tuple[str, float]] = {}
 
     try:
-        response = llm.chat(
-            messages,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
+        # Plan: fast model for categorising batches (own Groq quota); Gemini if Groq is limited.
+        try:
+            response = llm.chat(messages, tiers=("groq",), model="openai/gpt-oss-20b",
+                                temperature=0, response_format={"type": "json_object"})
+        except llm.AllTiersFailed:
+            response = llm.chat(messages, tiers=("gemini", "groq"), temperature=0,
+                                response_format={"type": "json_object"})
 
         predictions = _parse_llm_response(
             getattr(response, "text", None)
