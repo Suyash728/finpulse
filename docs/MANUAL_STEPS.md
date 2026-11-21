@@ -68,9 +68,10 @@ bash scripts/smoke_demo.sh              # expect SMOKE PASS
 - Free tier sleeps after ~15 min idle (cold start ~50 s). **Open /health 2 min before the demo.**
 
 ### Frontend on Vercel
-- [ ] vercel.com → Add New Project → import repo → **Root Directory: `frontend`** (framework auto: Next.js).
-- [ ] Env var: `NEXT_PUBLIC_API_URL=https://finpulse-x2b7.onrender.com` (no trailing slash) → Deploy.
-- [ ] Back on Render: `CORS_ORIGINS=https://<your-app>.vercel.app` (comma-separate if you also want localhost) → redeploy.
+- [x] vercel.com → Add New Project → import repo → **Root Directory: `frontend`** (framework auto: Next.js).
+- [x] Live: https://finpulse-sandy-five.vercel.app
+- [x] Env var: `NEXT_PUBLIC_API_URL=https://finpulse-x2b7.onrender.com` (no trailing slash) → Deploy.
+- [x] Back on Render: `CORS_ORIGINS=https://finpulse-sandy-five.vercel.app` (comma-separate if you also want localhost) → redeploy.
 - [ ] Smoke the cloud API: `API=https://finpulse-x2b7.onrender.com bash scripts/smoke_demo.sh`.
 
 ## 6. PWA install check (needs the HTTPS Vercel URL)
