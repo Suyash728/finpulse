@@ -1,8 +1,10 @@
+
 """Rule-first transaction categorization with an LLM fallback."""
 
 from __future__ import annotations
 
 import json
+import math
 import re
 
 from app.services import llm
@@ -13,6 +15,8 @@ CATEGORIES: tuple[str, ...] = (
     "Fuel", "Transfers", "Income", "Investments", "Other",
 )
 
+_CATEGORY_SET = frozenset(CATEGORIES)
+
 ESSENTIAL: frozenset[str] = frozenset({
     "Rent", "Utilities", "Groceries", "Medical", "EMI", "Insurance", "Education",
 })
@@ -21,15 +25,31 @@ REVIEW_THRESHOLD = 0.7
 
 
 def _valid_category(value: object) -> str:
-    return value if isinstance(value, str) and value in CATEGORIES else "Other"
+    """Return a valid category or Other for invalid values."""
+    return value if isinstance(value, str) and value in _CATEGORY_SET else "Other"
 
 
-def _parse_llm_response(content: str) -> dict[int, tuple[str, float]]:
+def _parse_llm_response(content: str | None) -> dict[int, tuple[str, float]]:
     """Parse indexed category predictions; reject malformed or invalid predictions."""
-    content = content.strip()
-    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.IGNORECASE)
+    if not isinstance(content, str):
+        return {}
 
-    payload = json.loads(content)
+    content = content.strip()
+    content = re.sub(
+        r"^```(?:json)?\s*|\s*```$",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    )
+
+    if not content:
+        return {}
+
+    try:
+        payload = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
     if not isinstance(payload, dict):
         return {}
 
@@ -40,18 +60,46 @@ def _parse_llm_response(content: str) -> dict[int, tuple[str, float]]:
     parsed: dict[int, tuple[str, float]] = {}
 
     for item in results:
+        if not isinstance(item, dict):
+            continue
+
         try:
-            index = int(item["index"])
+            raw_index = item["index"]
+
+            # Reject booleans and non-integer numeric indices.
+            if isinstance(raw_index, bool):
+                continue
+            elif isinstance(raw_index, int):
+                index = raw_index
+            elif isinstance(raw_index, float):
+                if not raw_index.is_integer():
+                    continue
+                index = int(raw_index)
+            elif isinstance(raw_index, str):
+                index = int(raw_index.strip())
+            else:
+                continue
+
             raw_category = item["category"]
             category = _valid_category(raw_category)
-            confidence = float(item["confidence"])
+
+            raw_confidence = item["confidence"]
+            if isinstance(raw_confidence, bool):
+                continue
+
+            confidence = float(raw_confidence)
+
+            if not math.isfinite(confidence):
+                continue
+
             confidence = max(0.0, min(1.0, confidence))
 
             if category != raw_category:
                 confidence = 0.0
 
             parsed[index] = (category, confidence)
-        except (KeyError, TypeError, ValueError):
+
+        except (KeyError, TypeError, ValueError, OverflowError):
             continue
 
     return parsed
@@ -73,28 +121,38 @@ def categorize(rows: list[dict]) -> list[dict]:
     )
     rules = rules_response.data or []
 
-    exact_rules = {
-        rule["pattern"]: rule["category"]
-        for rule in rules
-        if rule.get("match_type") == "exact"
-        and rule.get("category") in CATEGORIES
-    }
-    normalized_rules = {
-        rule["pattern"]: rule["category"]
-        for rule in rules
-        if rule.get("match_type") == "normalized"
-        and rule.get("category") in CATEGORIES
-    }
+    exact_rules: dict[str, str] = {}
+    normalized_rules: dict[str, str] = {}
+
+    for rule in rules:
+        match_type = rule.get("match_type")
+        pattern = rule.get("pattern")
+        category = rule.get("category")
+
+        if not isinstance(pattern, str) or not isinstance(category, str):
+            continue
+
+        if category not in _CATEGORY_SET:
+            continue
+
+        if match_type == "exact" and pattern:
+            exact_rules[pattern] = category
+
+        elif match_type == "normalized":
+            pattern = pattern.strip()
+            if pattern:
+                normalized_rules[pattern] = category
 
     output: list[dict | None] = [None] * len(rows)
     pending: list[tuple[int, dict]] = []
 
     for index, row in enumerate(rows):
-        raw_desc = row.get("raw_desc", "")
-        merchant_norm = row.get("merchant_norm", "")
+        raw_desc = row.get("raw_desc") or ""
+        merchant_norm = (row.get("merchant_norm") or "").strip()
 
-        category = exact_rules.get(raw_desc)
-        if category is None:
+        category = exact_rules.get(raw_desc) if raw_desc else None
+
+        if category is None and merchant_norm:
             category = normalized_rules.get(merchant_norm)
 
         if category is not None:
@@ -123,20 +181,20 @@ def categorize(rows: list[dict]) -> list[dict]:
 
     examples = [
         {
-            "raw_desc": item.get("raw_desc", ""),
-            "merchant_norm": item.get("merchant_norm", ""),
+            "raw_desc": item.get("raw_desc") or "",
+            "merchant_norm": item.get("merchant_norm") or "",
             "category": item.get("category", ""),
         }
         for item in corrections
-        if item.get("category") in CATEGORIES
+        if item.get("category") in _CATEGORY_SET
     ]
 
     transactions = [
         {
             "index": index,
-            "raw_desc": row.get("raw_desc", ""),
-            "merchant_norm": row.get("merchant_norm", ""),
-            "direction": row.get("direction", ""),
+            "raw_desc": row.get("raw_desc") or "",
+            "merchant_norm": (row.get("merchant_norm") or "").strip(),
+            "direction": row.get("direction") or "",
             "amount": row.get("amount", 0),
         }
         for index, row in pending
@@ -158,8 +216,12 @@ def categorize(rows: list[dict]) -> list[dict]:
         {
             "role": "user",
             "content": json.dumps(
-                {"correction_examples": examples, "transactions": transactions},
+                {
+                    "correction_examples": examples,
+                    "transactions": transactions,
+                },
                 ensure_ascii=False,
+                default=str,
             ),
         },
     ]
@@ -172,13 +234,32 @@ def categorize(rows: list[dict]) -> list[dict]:
             temperature=0,
             response_format={"type": "json_object"},
         )
-        predictions = _parse_llm_response(response.text)
-    except (llm.AllTiersFailed, ValueError, TypeError, KeyError):
+
+        predictions = _parse_llm_response(
+            getattr(response, "text", None)
+        )
+
+        # Ignore predictions that do not correspond to pending transactions.
+        valid_indices = {index for index, _ in pending}
+        predictions = {
+            index: prediction
+            for index, prediction in predictions.items()
+            if index in valid_indices
+        }
+
+    except (
+        llm.AllTiersFailed,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+    ):
         # Unknown predictions remain visible in the review queue.
         pass
 
     for index, row in pending:
         category, confidence = predictions.get(index, ("Other", 0.0))
+
         output[index] = {
             **row,
             "category": category,
@@ -192,7 +273,7 @@ def categorize(rows: list[dict]) -> list[dict]:
 
 def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
     """Save a normalized user correction and return similar transaction IDs."""
-    if category not in CATEGORIES:
+    if not isinstance(category, str) or category not in _CATEGORY_SET:
         raise ValueError(f"Invalid category: {category}")
 
     from app.db import get_client
@@ -206,15 +287,19 @@ def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
         .limit(1)
         .execute()
     )
+
     transactions = response.data or []
+
     if not transactions:
         raise ValueError("Transaction not found")
 
     transaction = transactions[0]
-    merchant_norm = transaction.get("merchant_norm", "").strip()
+    merchant_norm = (transaction.get("merchant_norm") or "").strip()
+
     if not merchant_norm:
         raise ValueError("Transaction has no normalized merchant")
 
+    # Save the user's correction.
     client.table("transactions").update({
         "category": category,
         "cat_source": "user",
@@ -222,6 +307,7 @@ def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
         "needs_review": False,
     }).eq("id", transaction_id).execute()
 
+    # Create or update the reusable merchant rule.
     rule_response = (
         client.table("category_rules")
         .upsert(
@@ -237,8 +323,10 @@ def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
     )
 
     rule_rows = rule_response.data or []
+
     if rule_rows:
         rule = rule_rows[0]
+
     else:
         lookup = (
             client.table("category_rules")
@@ -248,11 +336,15 @@ def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
             .limit(1)
             .execute()
         )
+
         rule_rows = lookup.data or []
+
         if not rule_rows:
             raise RuntimeError("Rule was not returned after saving")
+
         rule = rule_rows[0]
 
+    # Find similar transactions that still have a different category.
     similar_response = (
         client.table("transactions")
         .select("id,category")
@@ -260,6 +352,7 @@ def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
         .neq("id", transaction_id)
         .execute()
     )
+
     similar_ids = [
         item["id"]
         for item in (similar_response.data or [])
@@ -271,7 +364,13 @@ def learn_rule(transaction_id: str, category: str) -> tuple[dict, list[str]]:
 
 def apply_rule(rule_id: str, transaction_ids: list[str]) -> int:
     """Apply a saved rule only to selected transactions matching its pattern."""
-    if not transaction_ids:
+    unique_ids = list(dict.fromkeys(
+        transaction_id
+        for transaction_id in transaction_ids
+        if isinstance(transaction_id, str) and transaction_id
+    ))
+
+    if not unique_ids:
         return 0
 
     from app.db import get_client
@@ -285,22 +384,37 @@ def apply_rule(rule_id: str, transaction_ids: list[str]) -> int:
         .limit(1)
         .execute()
     )
+
     rules = rule_response.data or []
+
     if not rules:
         raise ValueError("Rule not found")
 
     rule = rules[0]
+
     match_type = rule.get("match_type")
     pattern = rule.get("pattern")
     category = rule.get("category")
 
-    if match_type not in ("exact", "normalized") or category not in CATEGORIES:
+    if (
+        match_type not in ("exact", "normalized")
+        or not isinstance(pattern, str)
+        or not pattern.strip()
+        or not isinstance(category, str)
+        or category not in _CATEGORY_SET
+    ):
         raise ValueError("Invalid saved rule")
+
+    normalized_pattern = (
+        pattern.strip()
+        if match_type == "normalized"
+        else pattern
+    )
 
     selected_response = (
         client.table("transactions")
         .select("id,raw_desc,merchant_norm")
-        .in_("id", transaction_ids)
+        .in_("id", unique_ids)
         .execute()
     )
 
@@ -309,9 +423,9 @@ def apply_rule(rule_id: str, transaction_ids: list[str]) -> int:
         for item in (selected_response.data or [])
         if item.get("id")
         and (
-            item.get("raw_desc") == pattern
+            item.get("raw_desc") == normalized_pattern
             if match_type == "exact"
-            else item.get("merchant_norm") == pattern
+            else (item.get("merchant_norm") or "").strip() == normalized_pattern
         )
     ]
 
@@ -327,7 +441,6 @@ def apply_rule(rule_id: str, transaction_ids: list[str]) -> int:
             "needs_review": False,
         })
         .in_("id", matching_ids)
-        .select("id")
         .execute()
     )
 
