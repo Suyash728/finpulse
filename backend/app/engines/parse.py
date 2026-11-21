@@ -42,6 +42,7 @@ def _standardize(rows: list[dict]) -> list[dict]:
             "amount": round(amount, 2),
             "direction": "dr" if txn_type == "debit" else "cr",
             "raw_desc": description,
+            "merchant": (row.get("merchant") or "").strip() or None,  # used by normalize
         })
 
     return result

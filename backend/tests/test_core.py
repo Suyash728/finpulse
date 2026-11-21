@@ -46,7 +46,11 @@ def test_essentials_subset_of_categories():
     ("post", "/email/send", {"kind": "report", "month": "2026-10"}),
     ("get", "/stats/auto-rate", None),
 ])
-def test_stub_routes_envelope(method, path, body):
+def test_stub_routes_envelope(method, path, body, monkeypatch):
+    # Route + validation + envelope only; engines are covered by their own tests (no DB/LLM here).
+    from app import main
+
+    monkeypatch.setattr(main, "_safe", lambda fn: main.ok({}))
     r = getattr(c, method)(path, **({"json": body} if body else {}))
     j = r.json()
     assert r.status_code == 200 and j["success"] is True and j["error"] is None
@@ -96,7 +100,10 @@ def test_apply_rule_route(monkeypatch):
     }
 
 
-def test_ingest_multipart():
+def test_ingest_multipart(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_safe", lambda fn: main.ok({}))
     r = c.post("/ingest", files={"file": ("a.csv", b"Date,Narration\n", "text/csv")})
     assert r.json()["success"]
 
