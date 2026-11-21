@@ -26,9 +26,25 @@ _PREFIX = re.compile(
 _CITY = re.compile(r"\b(?:mumbai|bangalore|bengaluru|blr|delhi|pune|navi|andheri|bandra|thane|in)\b")
 
 
+_SMS_PAYEE = re.compile(
+    r"(?:\btrf\s+to|\bto|\bat|\bby\s+vpa|;)\s+(.+?)(?:\s+(?:on|ref|refno|credited|\(upi)\b|[.;]\s|$)",
+    re.IGNORECASE)
+
+
+def sms_payee(text: str) -> str | None:
+    """Payee from a full bank SMS ("Sent Rs.1240 ... To UPI/RAZ*PAYU8823 On ...")."""
+    if len(text) < 40 or not re.search(r"\b(?:rs\.?|inr|debited|credited|spent|sent)\b", text, re.IGNORECASE):
+        return None
+    vpa = re.search(r"\bby\s+vpa\s+(\S+)", text, re.IGNORECASE)  # credits: payer VPA
+    if vpa:
+        return vpa.group(1)
+    m = _SMS_PAYEE.search(text)
+    return m.group(1).strip() if m else None
+
+
 def normalize_merchant(raw_desc: str) -> str:
     """Lowercase, alias known brands, strip channel prefixes / refs / digits / city words."""
-    s = (raw_desc or "").lower().strip()
+    s = (sms_payee(raw_desc or "") or raw_desc or "").lower().strip()
     for pat, name in _ALIASES:
         if re.search(pat, s):
             return name
