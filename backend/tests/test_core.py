@@ -35,8 +35,6 @@ def test_essentials_subset_of_categories():
     ("get", "/health", None),
     ("post", "/ingest", {"kind": "sms", "text": "Rs.499 debited to NETFLIX"}),
     ("get", "/transactions?month=2026-10&needs_review=true", None),
-    ("post", "/transactions/tx_002/correct", {"category": "Groceries"}),
-    ("post", "/rules/apply", {"rule_id": "rule_001", "transaction_ids": ["tx_014"]}),
     ("get", "/profile", None),
     ("put", "/profile", {"monthly_income": 90000}),
     ("get", "/goals", None),
@@ -52,6 +50,50 @@ def test_stub_routes_envelope(method, path, body):
     r = getattr(c, method)(path, **({"json": body} if body else {}))
     j = r.json()
     assert r.status_code == 200 and j["success"] is True and j["error"] is None
+
+
+def test_correct_transaction_route(monkeypatch):
+    monkeypatch.setattr(
+        "app.engines.categorize.learn_rule",
+        lambda tx_id, category: (
+            {"id": "rule_001", "category": category},
+            ["tx_014"],
+        ),
+    )
+
+    response = c.post(
+        "/transactions/tx_002/correct",
+        json={"category": "Groceries"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "data": {
+            "rule": {"id": "rule_001", "category": "Groceries"},
+            "similar_ids": ["tx_014"],
+        },
+        "error": None,
+    }
+
+
+def test_apply_rule_route(monkeypatch):
+    monkeypatch.setattr(
+        "app.engines.categorize.apply_rule",
+        lambda rule_id, transaction_ids: 1,
+    )
+
+    response = c.post(
+        "/rules/apply",
+        json={"rule_id": "rule_001", "transaction_ids": ["tx_014"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "data": {"updated": 1},
+        "error": None,
+    }
 
 
 def test_ingest_multipart():

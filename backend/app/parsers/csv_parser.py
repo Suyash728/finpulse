@@ -1,72 +1,106 @@
-"""Parse HDFC-format CSV bank statements.
-
-Columns: Date, Narration, Chq./Ref.No., Value Dt, Withdrawal Amt., Deposit Amt., Closing Balance
-
-Returns a list of transaction dicts ready for the categoriser.
-"""
+"""Parse HDFC- and Kotak-style Indian bank CSV statements."""
 
 from __future__ import annotations
 
 import csv
 import io
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 
-def _clean_amount(raw: str) -> Decimal | None:
-    """Parse Indian-format amount string like '22,000.00' → Decimal."""
-    if not raw or not raw.strip():
+def _clean_amount(raw: str | None) -> Decimal | None:
+    if not raw:
         return None
     try:
-        return Decimal(raw.strip().replace(",", ""))
-    except InvalidOperation:
+        return Decimal(raw.strip().replace(",", "").replace("₹", ""))
+    except (InvalidOperation, AttributeError):
         return None
+
+
+def _parse_date(raw: str) -> str:
+    raw = raw.strip()
+    formats = (
+        "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d",
+        "%d-%b-%y", "%d-%b-%Y",
+        "%d %b %Y", "%d %B %Y",
+        "%d/%m/%y", "%d-%m-%y",
+    )
+    for fmt in formats:
+        try:
+            return datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return ""
+
+
+def _find_header(lines: list[str]) -> int | None:
+    for index, line in enumerate(lines):
+        lowered = line.lower()
+        has_date = "date" in lowered
+        has_description = any(x in lowered for x in ("narration", "particulars"))
+        has_amount = any(x in lowered for x in ("withdrawal", "amount (inr)", "deposit"))
+        if has_date and has_description and has_amount:
+            return index
+    return None
 
 
 def parse_csv(content: str | bytes) -> list[dict]:
-    """Parse an HDFC CSV statement → list of transaction dicts.
-
-    Each dict: {date, raw_text, merchant, amount, type, ref_no, closing_balance}
-    """
+    """Return rows with date, raw_text, merchant, amount, type, ref_no and closing_balance."""
     if isinstance(content, bytes):
-        content = content.decode("utf-8-sig")  # handle BOM
+        content = content.decode("utf-8-sig", errors="replace")
 
-    rows = []
-    reader = csv.DictReader(io.StringIO(content))
+    lines = content.splitlines()
+    header_index = _find_header(lines)
+    if header_index is None:
+        return []
+
+    reader = csv.DictReader(io.StringIO("\n".join(lines[header_index:])))
+    transactions = []
 
     for row in reader:
-        narration = (row.get("Narration") or "").strip()
+        row = {
+            (key or "").strip().lower(): (value or "").strip()
+            for key, value in row.items()
+        }
+
+        narration = row.get("narration") or row.get("particulars") or ""
         if not narration:
             continue
 
-        withdrawal = _clean_amount(row.get("Withdrawal Amt.", ""))
-        deposit = _clean_amount(row.get("Deposit Amt.", ""))
-        closing = _clean_amount(row.get("Closing Balance", ""))
-
-        if withdrawal and withdrawal > 0:
-            amount = float(withdrawal)
-            txn_type = "debit"
-        elif deposit and deposit > 0:
-            amount = float(deposit)
-            txn_type = "credit"
-        else:
+        raw_date = row.get("date") or row.get("tran date") or row.get("value date") or ""
+        iso_date = _parse_date(raw_date)
+        if not iso_date:
             continue
 
-        # Parse date dd/mm/yyyy → yyyy-mm-dd
-        raw_date = (row.get("Date") or "").strip()
-        try:
-            parts = raw_date.split("/")
-            iso_date = f"{parts[2]}-{parts[1]}-{parts[0]}"
-        except (IndexError, ValueError):
-            iso_date = raw_date
+        withdrawal = _clean_amount(row.get("withdrawal amt.") or row.get("withdrawal amount"))
+        deposit = _clean_amount(row.get("deposit amt.") or row.get("deposit amount"))
+        balance = _clean_amount(row.get("closing balance") or row.get("balance (inr)"))
 
-        rows.append({
+        if withdrawal is not None and withdrawal > 0:
+            amount, txn_type = withdrawal, "debit"
+        elif deposit is not None and deposit > 0:
+            amount, txn_type = deposit, "credit"
+        else:
+            combined = _clean_amount(row.get("amount (inr)") or row.get("amount"))
+            direction = (row.get("dr / cr") or row.get("dr/cr") or row.get("type") or "").lower()
+
+            if combined is None or combined <= 0:
+                continue
+            if direction in ("dr", "debit", "withdrawal"):
+                amount, txn_type = combined, "debit"
+            elif direction in ("cr", "credit", "deposit"):
+                amount, txn_type = combined, "credit"
+            else:
+                continue
+
+        transactions.append({
             "date": iso_date,
             "raw_text": narration,
             "merchant": narration,
-            "amount": amount,
+            "amount": float(amount),
             "type": txn_type,
-            "ref_no": (row.get("Chq./Ref.No.") or "").strip(),
-            "closing_balance": float(closing) if closing else None,
+            "ref_no": row.get("chq./ref.no.") or row.get("ref no") or "",
+            "closing_balance": float(balance) if balance is not None else None,
         })
 
-    return rows
+    return transactions
