@@ -8,22 +8,21 @@ from datetime import datetime
 
 from app.services import llm
 
-
-_AMOUNT_RE = re.compile(r"(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)", re.I)
-_ACCT_RE = re.compile(r"(?:A/c|Acct?)\s*(?:No\.?)?\s*(?:XX?|X+)(\d{3,4})", re.I)
-_VPA_RE = re.compile(r"(?:VPA|to)\s+([A-Z0-9._-]+@[A-Z0-9.-]+)", re.I)
-_REF_RE = re.compile(r"(?:UPI\s*Ref|Ref)\s*[:\s]?\s*(\d{6,})", re.I)
+_AMOUNT_RE = re.compile(r"(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)", re.IGNORECASE)
+_ACCT_RE = re.compile(r"(?:A/c|Acct?)\s*(?:No\.?)?\s*(?:XX?|X+)(\d{3,4})", re.IGNORECASE)
+_VPA_RE = re.compile(r"(?:VPA|to)\s+([A-Z0-9._-]+@[A-Z0-9.-]+)", re.IGNORECASE)
+_REF_RE = re.compile(r"(?:UPI\s*Ref|Ref)\s*[:\s]?\s*(\d{6,})", re.IGNORECASE)
 
 _DATE_PATTERNS = (
     re.compile(r"\b\d{4}-\d{1,2}-\d{1,2}\b"),
     re.compile(r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b"),
     re.compile(
         r"\b\d{1,2}[-/ ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*[-/ ]\d{2,4}\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b\d{1,2}(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\d{2,4}\b",
-        re.I,
+        re.IGNORECASE,
     ),
 )
 
@@ -36,19 +35,19 @@ _DATE_FORMATS = (
 _SKIP_RE = re.compile(
     r"\b(?:OTP|one.time.password|pre-approved|personal loan|"
     r"apply now|loan offer|valid for \d+ mins?)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 _DEBIT_RE = re.compile(
-    r"\b(?:debit(?:ed)?|sent|spent)\b", re.I
+    r"\b(?:debit(?:ed)?|sent|spent)\b", re.IGNORECASE
 )
 _CREDIT_RE = re.compile(
-    r"\bcredit(?:ed)?\b", re.I
+    r"\bcredit(?:ed)?\b", re.IGNORECASE
 )
 _TRANSACTION_HINT_RE = re.compile(
     r"\b(?:debit(?:ed)?|credit(?:ed)?|sent|spent on|"
     r"withdrawn|transferred|purchase)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -105,7 +104,7 @@ def _extract_regex(text: str) -> dict | None:
         return None
 
     vpa_match = _VPA_RE.search(text)
-    card_merchant = re.search(r"\bat\s+(.+?)(?:\s+on\s+|[.;]|$)", text, re.I)
+    card_merchant = re.search(r"\bat\s+(.+?)(?:\s+on\s+|[.;]|$)", text, re.IGNORECASE)
     merchant = (
         vpa_match.group(1) if vpa_match
         else card_merchant.group(1).strip() if card_merchant
@@ -169,13 +168,13 @@ def _extract_llm(text: str) -> dict | None:
             "ref_no": str(data.get("ref_no") or ""),
             "closing_balance": None,
         }
-    except Exception:
+    except Exception:  # noqa: BLE001 - LLM fallback is best-effort
         return None
 
 
 def parse_sms(content: str) -> list[dict]:
     """Parse SMS blocks; skip OTPs, promotions and messages without a clear direction."""
-    parts = re.split(r"---\s*SMS\s*\d+\s*---", content, flags=re.I)
+    parts = re.split(r"---\s*SMS\s*\d+\s*---", content, flags=re.IGNORECASE)
 
     if len(parts) <= 1:
         parts = [p.strip() for p in content.strip().split("\n\n") if p.strip()]

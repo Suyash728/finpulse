@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
-from io import BytesIO
 
 import pdfplumber
 

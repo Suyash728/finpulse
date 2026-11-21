@@ -13,7 +13,7 @@ SAMPLES = Path(__file__).resolve().parents[2] / "frontend" / "public" / "samples
 def check_standardized_rows(rows):
     assert rows
     for row in rows:
-        assert set(row) == {"date", "amount", "direction", "raw_desc"}
+        assert set(row) == {"date", "amount", "direction", "raw_desc", "merchant"}
         assert row["direction"] in {"dr", "cr"}
         assert row["amount"] > 0
         assert row["raw_desc"]

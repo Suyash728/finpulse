@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from typing import Literal
@@ -20,8 +21,9 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from app.examples import EXAMPLES  # imported after load_dotenv()
 from app.services import trace
+
+log = logging.getLogger("finpulse")
 
 app = FastAPI(title="FinPulse API")
 app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
@@ -34,6 +36,17 @@ def ok(data=None):
 
 def fail(msg: str):
     return {"success": False, "data": None, "error": msg}
+
+
+def _safe(fn):
+    """Run an engine call; any failure becomes the envelope error (and is logged)."""
+    try:
+        return ok(fn())
+    except ValueError as exc:
+        return fail(str(exc))
+    except Exception as exc:
+        log.exception("route failed")
+        return fail(f"{type(exc).__name__}: {str(exc)[:200]}")
 
 
 # ---------- request models (mirror openapi.yaml) ----------
@@ -92,26 +105,39 @@ def health():
     return ok({"status": "up"})
 
 
+@app.post("/admin/reset-demo")
+def reset_demo():
+    """Demo helper (not in the public contract): wipe data, re-seed profile + goals."""
+    from app.engines import ledger
+
+    return _safe(lambda: (ledger.reset_demo(), {"reset": True})[1])
+
+
 @app.post("/ingest")
 async def ingest(request: Request):
     """multipart `file` (pdf/csv/txt) OR JSON {kind:"sms", text}. TODO(slice 1): engines.parse ->
     normalize -> categorize -> insert uploads + transactions."""
+    from app.engines import ledger
+
     if request.headers.get("content-type", "").startswith("multipart/"):
         async with request.form() as form:  # closes the spooled upload
-            if "file" not in form:
+            f = form.get("file")
+            if f is None or isinstance(f, str):
                 return fail("missing file")
-    else:
-        body = await request.json()
-        if body.get("kind") != "sms" or not body.get("text"):
-            return fail("expected {kind:'sms', text}")
-    return ok(EXAMPLES["ingest"])
+            data, name = await f.read(), f.filename
+        return _safe(lambda: ledger.ingest("file", name, data=data))
+    body = await request.json()
+    if body.get("kind") != "sms" or not body.get("text"):
+        return fail("expected {kind:'sms', text}")
+    return _safe(lambda: ledger.ingest("sms", "Pasted SMS", text=body["text"]))
 
 
 @app.get("/transactions")
 def list_transactions(month: str | None = None, category: str | None = None,
                       needs_review: bool | None = None):
-    """TODO(slice 2)"""
-    return ok(EXAMPLES["transactions"])
+    from app.engines import ledger
+
+    return _safe(lambda: ledger.list_transactions(month, category, needs_review))
 
 
 @app.post("/transactions/{tx_id}/correct")
@@ -124,6 +150,7 @@ def correct_transaction(tx_id: str, body: CorrectIn):
     except ValueError as exc:
         return fail(str(exc))
     except Exception:
+        log.exception("correct failed")
         return fail("Could not save transaction correction")
 
 
@@ -137,67 +164,79 @@ def rules_apply(body: RuleApplyIn):
     except ValueError as exc:
         return fail(str(exc))
     except Exception:
+        log.exception("apply failed")
         return fail("Could not apply category rule")
 
 
 @app.get("/profile")
 def get_profile():
-    """TODO(slice 5)"""
-    return ok(EXAMPLES["profile"])
+    from app.engines import ledger
+
+    return _safe(ledger.get_profile)
 
 
 @app.put("/profile")
 def put_profile(body: ProfileIn):
-    """TODO(slice 5)"""
-    return ok(EXAMPLES["profile_put"])
+    from app.engines import ledger
+
+    return _safe(lambda: ledger.put_profile(body.model_dump()))
 
 
 @app.get("/goals")
 def get_goals():
-    """TODO(slice 5)"""
-    return ok(EXAMPLES["goals"])
+    from app.engines import ledger
+
+    return _safe(ledger.get_goals)
 
 
 @app.post("/goals")
 def post_goal(body: GoalIn):
-    """TODO(slice 5)"""
-    return ok(EXAMPLES["goal_post"])
+    from app.engines import ledger
+
+    return _safe(lambda: ledger.add_goal(body.model_dump()))
 
 
 @app.get("/recurring")
 def get_recurring():
-    """TODO(slice 4): engines.recurring.detect_recurring"""
-    return ok(EXAMPLES["recurring"])
+    from app.engines import ledger
+    from app.engines.recurring import detect_recurring
+
+    return _safe(lambda: {"items": detect_recurring(ledger.all_transactions())})
 
 
 @app.post("/simulate")
 def post_simulate(body: SimulateIn):
-    """TODO(slice 6): engines.simulate.simulate"""
-    return ok(EXAMPLES["simulate"])
+    from app.engines.simulate import simulate
+
+    return _safe(lambda: simulate([a.model_dump() for a in body.adjustments]))
 
 
 @app.get("/nudges")
 def get_nudges():
-    """TODO(slice 7): engines.nudges.compute_nudges"""
-    return ok(EXAMPLES["nudges"])
+    from app.engines.nudges import compute_nudges
+
+    return _safe(lambda: {"items": compute_nudges()})
 
 
 @app.get("/report/{month}")
 def get_report(month: str):
-    """TODO(slice 8): engines.report.monthly_report"""
-    return ok(EXAMPLES["report"])
+    from app.engines.report import monthly_report
+
+    return _safe(lambda: monthly_report(month))
 
 
 @app.post("/email/send")
 def email_send(body: EmailIn):
-    """TODO(slice 9): engines.emailer.send"""
-    return ok(EXAMPLES["email"])
+    from app.engines.emailer import send
+
+    return _safe(lambda: send(body.kind, body.month))
 
 
 @app.get("/stats/auto-rate")
 def auto_rate():
-    """TODO(slice 2)"""
-    return ok(EXAMPLES["auto_rate"])
+    from app.engines import ledger
+
+    return _safe(ledger.auto_rate_series)
 
 
 # ---------- coach (SSE trace pattern kept from the template) ----------

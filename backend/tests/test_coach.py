@@ -16,6 +16,11 @@ def _no_db(monkeypatch):
         raise RuntimeError("no db in tests")
 
     monkeypatch.setattr(coach, "_db", boom)
+    from app.engines import recurring, simulate
+    from app.examples import EXAMPLES
+
+    monkeypatch.setattr(simulate, "simulate", lambda adj: dict(EXAMPLES["simulate"]))
+    monkeypatch.setattr(recurring, "detect_recurring", lambda rows: EXAMPLES["recurring"]["items"])
 
 
 PICKS = [
