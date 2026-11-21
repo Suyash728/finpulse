@@ -53,6 +53,11 @@ export default function HomePage() {
               <BudgetRings report={report} />
             </Section>
           )}
+          {report?.projection && (
+            <Section title="Month projection">
+              <ProjectionCard p={report.projection} />
+            </Section>
+          )}
         </div>
         <div className="space-y-3 [&>*]:min-w-0">
           <Section title="Spending by category" action={<Link href="/report" className="-mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary md:min-h-0">Report</Link>}>
@@ -68,11 +73,6 @@ export default function HomePage() {
           </Section>
         </div>
       </div>
-      {report?.projection && (
-        <Section title="Month projection">
-          <ProjectionCard p={report.projection} />
-        </Section>
-      )}
     </div>
   );
 }
